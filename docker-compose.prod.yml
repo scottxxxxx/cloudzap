@@ -1,7 +1,6 @@
-version: "3.8"
 services:
   cloudzap:
-    image: ghcr.io/scottguida/cloudzap:latest
+    image: ghcr.io/scottxxxxx/cloudzap:latest
     container_name: cloudzap
     restart: unless-stopped
     expose:
