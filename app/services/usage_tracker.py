@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -102,12 +103,17 @@ class UsageTracker:
         status: str = "success",
         error_msg: str | None = None,
     ) -> None:
+        # Serialize the full usage metadata as JSON
+        metadata_json = None
+        if response and response.usage:
+            metadata_json = json.dumps(response.usage, ensure_ascii=False)
+
         await db.execute(
             """INSERT INTO usage_log
                (id, user_id, provider, model, input_tokens, output_tokens,
                 estimated_cost_usd, request_timestamp, response_time_ms,
-                status, error_message)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                status, error_message, metadata)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(uuid.uuid4()),
                 user_id,
@@ -120,6 +126,7 @@ class UsageTracker:
                 response_time_ms,
                 status,
                 error_msg,
+                metadata_json,
             ),
         )
         await db.commit()

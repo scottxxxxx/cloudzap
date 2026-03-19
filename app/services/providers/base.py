@@ -50,6 +50,47 @@ class ProviderAdapter(ABC):
             ),
         )
 
+    @staticmethod
+    def _extract_path(data: dict, path: str):
+        """Extract a value from a nested dict using dot notation.
+
+        Examples:
+            _extract_path(data, "usage.prompt_tokens") -> data["usage"]["prompt_tokens"]
+            _extract_path(data, "choices.0.message.content") -> data["choices"][0]["message"]["content"]
+
+        Returns None if any key in the path is missing.
+        """
+        current = data
+        for key in path.split("."):
+            if current is None:
+                return None
+            if isinstance(current, dict):
+                current = current.get(key)
+            elif isinstance(current, list):
+                try:
+                    current = current[int(key)]
+                except (ValueError, IndexError):
+                    return None
+            else:
+                return None
+        return current
+
+    @staticmethod
+    def _flatten_usage(usage_obj: dict, prefix: str = "") -> dict:
+        """Recursively flatten a nested usage dict into dot-notation keys.
+
+        Example: {"prompt_tokens_details": {"cached_tokens": 5}}
+             ->  {"prompt_tokens_details.cached_tokens": 5}
+        """
+        flat: dict = {}
+        for k, v in usage_obj.items():
+            full_key = f"{prefix}{k}" if not prefix else f"{prefix}.{k}"
+            if isinstance(v, dict):
+                flat.update(ProviderAdapter._flatten_usage(v, full_key))
+            elif v is not None:
+                flat[full_key] = v
+        return flat
+
     async def _post(
         self, url: str, body: dict, headers: dict
     ) -> tuple[int, dict, str, str]:

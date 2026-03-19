@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Generic config-driven provider adapter (`api_format: "generic"`) — add new LLM providers via YAML alone, no code changes needed
+- Full provider usage metadata capture in `usage` response field (cached tokens, reasoning tokens, finish reason, response ID, etc.)
+- `metadata` JSON column in `usage_log` table for complete provider telemetry
+- Dot-path field extraction (`response_mappings`) and automatic usage flattening for nested provider responses
+- Provider config template in `providers.yml` with inline documentation
+
 ## [0.1.0] - 2026-03-18
 
 ### Added

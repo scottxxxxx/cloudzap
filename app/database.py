@@ -41,7 +41,8 @@ CREATE TABLE IF NOT EXISTS usage_log (
     request_timestamp TEXT NOT NULL,
     response_time_ms INTEGER,
     status TEXT NOT NULL DEFAULT 'success',
-    error_message TEXT
+    error_message TEXT,
+    metadata TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_usage_user_date ON usage_log(user_id, request_timestamp);

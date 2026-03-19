@@ -51,9 +51,25 @@ Thanks for your interest in contributing! This guide will help you get started.
 
 ## Adding a New Provider
 
-1. Determine if it uses the OpenAI chat completions format (many do)
-   - If yes: add it to `config/providers.yml` — no code changes needed
-   - If no: create a new adapter in `app/services/providers/` following `base.py`
+**No code changes needed in most cases.** There are three paths:
+
+### Path 1: OpenAI-compatible provider (most common)
+If the provider uses the OpenAI chat completions format (most do):
+1. Add it to `config/providers.yml` with `api_format: "openai"`
+2. Add the env key to `app/config.py` and `.env.example`
+3. That's it — all response fields are captured automatically
+
+### Path 2: Custom provider via generic adapter (no code)
+If the provider uses a non-standard format:
+1. Add it to `config/providers.yml` with `api_format: "generic"`
+2. Define `request_format` (how to build the request body)
+3. Define `response_mappings` (dot-path to text, tokens, etc.)
+4. Define `usage_paths` (which JSON paths contain usage metadata)
+5. See the template at the bottom of `config/providers.yml`
+
+### Path 3: Dedicated adapter (rare)
+Only needed if the provider has complex logic (safety blocks, multi-part responses, etc.) that can't be expressed in config:
+1. Create a new adapter in `app/services/providers/` following `base.py`
 2. Add the adapter class to `ADAPTER_MAP` in `app/services/provider_router.py`
 3. Add the provider's env key to `app/config.py` and `.env.example`
 4. Add tests in `tests/test_providers.py`
