@@ -58,14 +58,27 @@ class AnthropicAdapter(ProviderAdapter):
         ]
         text = "\n".join(text_parts) if text_parts else ""
 
-        usage = data.get("usage", {})
+        # Capture the full usage block from the provider
+        # Anthropic returns: input_tokens, output_tokens,
+        # cache_creation_input_tokens, cache_read_input_tokens
+        raw_usage = data.get("usage", {})
+        usage = self._flatten_usage(raw_usage)
+
+        # Also capture response-level metadata
+        if data.get("id"):
+            usage["response_id"] = data["id"]
+        if data.get("model"):
+            usage["model_version"] = data["model"]
+        if data.get("stop_reason"):
+            usage["finish_reason"] = data["stop_reason"]
 
         return ChatResponse(
             text=text,
-            input_tokens=usage.get("input_tokens"),
-            output_tokens=usage.get("output_tokens"),
+            input_tokens=raw_usage.get("input_tokens"),
+            output_tokens=raw_usage.get("output_tokens"),
             model=request.model,
             provider=request.provider,
+            usage=usage,
             raw_request_json=raw_req,
             raw_response_json=raw_resp,
         )

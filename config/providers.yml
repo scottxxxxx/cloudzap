@@ -1,3 +1,16 @@
+# =============================================================================
+# CloudZap Provider Registry
+#
+# To add a new provider:
+#   1. If it uses the OpenAI chat completions format, just add it here with
+#      api_format: "openai" — no code changes needed.
+#   2. If it uses a custom format, use api_format: "generic" and define
+#      request_format + response_mappings (see template at bottom of file).
+#   3. Add the env var to your .env file.
+#
+# Models list is optional. If omitted, any model ID is accepted.
+# =============================================================================
+
 providers:
   openai:
     display_name: "OpenAI"
@@ -117,3 +130,54 @@ providers:
       - id: "qwen3.5-flash"
         supports_vision: true
         max_tokens_default: 4096
+
+  # ===========================================================================
+  # TEMPLATE: Adding a custom provider via the generic adapter
+  #
+  # Uncomment and modify the block below. No Python code changes needed.
+  #
+  # The generic adapter uses dot-path notation to extract fields from the
+  # provider's JSON response. For example, "choices.0.message.content" means
+  # response_json["choices"][0]["message"]["content"].
+  #
+  # All fields in the provider's usage block are automatically captured in
+  # the response's `usage` dict, including fields that don't exist yet
+  # (cached tokens, reasoning tokens, etc.).
+  # ===========================================================================
+  #
+  # my_provider:
+  #   display_name: "My Provider"
+  #   api_format: "generic"
+  #   base_url: "https://api.myprovider.com/v1/chat"
+  #   auth_header: "Authorization"
+  #   auth_prefix: "Bearer "
+  #   extra_headers: {}
+  #   env_key: "my_provider_api_key"
+  #
+  #   # How to build the HTTP request body
+  #   request_format:
+  #     model_field: "model"                # Key name for model ID in request
+  #     messages_field: "messages"           # Key name for messages array
+  #     system_in_messages: true             # true = system role in messages array
+  #     # system_prompt_field: "system"      # If system_in_messages: false, top-level key
+  #     max_tokens_field: "max_tokens"       # Key name for max tokens
+  #     image_format: "openai"              # "openai", "anthropic", "gemini", or "none"
+  #
+  #   # How to extract fields from the JSON response (dot-path notation)
+  #   response_mappings:
+  #     text: "choices.0.message.content"          # Required: where the response text lives
+  #     input_tokens: "usage.prompt_tokens"         # Optional: input token count
+  #     output_tokens: "usage.completion_tokens"    # Optional: output token count
+  #     finish_reason: "choices.0.finish_reason"    # Optional: any extra fields you want
+  #     response_id: "id"
+  #     model_version: "model"
+  #
+  #   # Which JSON paths contain usage/metadata dicts to capture (all keys auto-flattened)
+  #   usage_paths:
+  #     - "usage"
+  #
+  #   # Models list (optional — omit to allow any model ID)
+  #   models:
+  #     - id: "my-model-v1"
+  #       supports_vision: true
+  #       max_tokens_default: 4096

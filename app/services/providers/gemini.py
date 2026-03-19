@@ -79,14 +79,23 @@ class GeminiAdapter(ProviderAdapter):
         parts = candidate.get("content", {}).get("parts", [])
         text = "".join(p.get("text", "") for p in parts)
 
-        usage = data.get("usageMetadata", {})
+        # Capture the full usage block from the provider
+        # Gemini returns: promptTokenCount, candidatesTokenCount, totalTokenCount,
+        # cachedContentTokenCount, thoughtsTokenCount
+        raw_usage = data.get("usageMetadata", {})
+        usage = self._flatten_usage(raw_usage)
+
+        # Also capture response-level metadata
+        if finish_reason:
+            usage["finish_reason"] = finish_reason
 
         return ChatResponse(
             text=text,
-            input_tokens=usage.get("promptTokenCount"),
-            output_tokens=usage.get("candidatesTokenCount"),
+            input_tokens=raw_usage.get("promptTokenCount"),
+            output_tokens=raw_usage.get("candidatesTokenCount"),
             model=request.model,
             provider=request.provider,
+            usage=usage,
             raw_request_json=raw_req,
             raw_response_json=raw_resp,
         )

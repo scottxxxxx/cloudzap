@@ -40,14 +40,29 @@ class OpenAICompatAdapter(ProviderAdapter):
             )
 
         text = data["choices"][0]["message"]["content"]
-        usage = data.get("usage", {})
+
+        # Capture the full usage block from the provider
+        # OpenAI returns: prompt_tokens, completion_tokens, total_tokens,
+        # prompt_tokens_details.cached_tokens, completion_tokens_details.reasoning_tokens, etc.
+        raw_usage = data.get("usage", {})
+        usage = self._flatten_usage(raw_usage)
+
+        # Also capture model-level metadata
+        if data.get("id"):
+            usage["response_id"] = data["id"]
+        if data.get("model"):
+            usage["model_version"] = data["model"]
+        finish_reason = self._extract_path(data, "choices.0.finish_reason")
+        if finish_reason:
+            usage["finish_reason"] = finish_reason
 
         return ChatResponse(
             text=text,
-            input_tokens=usage.get("prompt_tokens"),
-            output_tokens=usage.get("completion_tokens"),
+            input_tokens=raw_usage.get("prompt_tokens"),
+            output_tokens=raw_usage.get("completion_tokens"),
             model=request.model,
             provider=request.provider,
+            usage=usage,
             raw_request_json=raw_req,
             raw_response_json=raw_resp,
         )
