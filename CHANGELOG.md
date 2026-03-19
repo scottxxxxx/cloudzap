@@ -1,0 +1,23 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [Unreleased]
+
+## [0.1.0] - 2026-03-18
+
+### Added
+- Initial release
+- Multi-provider LLM routing (OpenAI, Anthropic, Google Gemini, xAI, DeepSeek, Kimi, Qwen)
+- Sign in with Apple authentication with JWT access/refresh tokens
+- Subscription tier system with YAML configuration
+- Per-user rate limiting (requests per minute)
+- Daily token quota enforcement
+- Usage logging to SQLite
+- Manual admin tier management endpoint
+- Health check endpoint
+- Docker deployment with GitHub Actions CI/CD
+- Raw request/response JSON passthrough (base64 redacted)
+- Interactive API docs at `/docs`

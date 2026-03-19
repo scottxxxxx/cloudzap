@@ -1,5 +1,10 @@
 # CloudZap
 
+[![Tests](https://github.com/scottxxxxx/cloudzap/actions/workflows/test.yml/badge.svg)](https://github.com/scottxxxxx/cloudzap/actions/workflows/test.yml)
+[![Deploy](https://github.com/scottxxxxx/cloudzap/actions/workflows/deploy.yml/badge.svg)](https://github.com/scottxxxxx/cloudzap/actions/workflows/deploy.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+
 Open-source LLM API gateway with authentication, multi-provider routing, subscription-based access control, and usage tracking.
 
 CloudZap sits between your mobile/web app and LLM providers (OpenAI, Anthropic, Google Gemini, xAI, DeepSeek, Kimi, Qwen). It keeps API keys server-side, authenticates users via Sign in with Apple, enforces tier-based rate limits and token quotas, and logs all usage.
