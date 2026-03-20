@@ -222,6 +222,7 @@ async def get_tiers(
     for name, tier in tier_config.tiers.items():
         tiers[name] = {
             "display_name": tier.display_name,
+            "default_model": tier.default_model,
             "daily_token_limit": tier.daily_token_limit,
             "daily_cost_limit_usd": tier.daily_cost_limit_usd,
             "requests_per_minute": tier.requests_per_minute,
