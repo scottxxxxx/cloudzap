@@ -11,6 +11,7 @@ class TierDefinition(BaseModel):
     allowed_models: list[str]
     max_images_per_request: int
     daily_cost_limit_usd: float = -1  # -1 = unlimited, uses token limit instead
+    default_model: str = ""  # "provider/model" format, used when client sends model="auto"
 
 
 class TierConfig(BaseModel):

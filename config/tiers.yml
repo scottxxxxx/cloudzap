@@ -4,14 +4,11 @@ tiers:
     daily_token_limit: 50000
     daily_cost_limit_usd: 0.10
     requests_per_minute: 5
+    default_model: "anthropic/claude-haiku-4-5-20251001"
     allowed_providers:
-      - "openai"
       - "anthropic"
-      - "google"
     allowed_models:
-      - "gpt-5-nano"
       - "claude-haiku-4-5-20251001"
-      - "gemini-3-flash-preview"
     max_images_per_request: 0
 
   subscriber:
@@ -19,6 +16,7 @@ tiers:
     daily_token_limit: 500000
     daily_cost_limit_usd: 5.00
     requests_per_minute: 30
+    default_model: "anthropic/claude-sonnet-4-6"
     allowed_providers:
       - "openai"
       - "anthropic"
@@ -35,6 +33,7 @@ tiers:
     display_name: "Admin"
     daily_token_limit: -1
     requests_per_minute: 120
+    default_model: "anthropic/claude-sonnet-4-6"
     allowed_providers:
       - "*"
     allowed_models:
