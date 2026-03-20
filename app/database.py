@@ -49,12 +49,24 @@ CREATE INDEX IF NOT EXISTS idx_usage_user_date ON usage_log(user_id, request_tim
 """
 
 
+MIGRATIONS = [
+    # v1: Add metadata column to usage_log (added after initial deployment)
+    "ALTER TABLE usage_log ADD COLUMN metadata TEXT",
+]
+
+
 async def init_db(database_url: str) -> None:
     global _db_path
     _db_path = database_url.replace("sqlite+aiosqlite:///", "")
     os.makedirs(os.path.dirname(_db_path) or ".", exist_ok=True)
     async with aiosqlite.connect(_db_path) as db:
         await db.executescript(SCHEMA_SQL)
+        # Run migrations for existing databases
+        for sql in MIGRATIONS:
+            try:
+                await db.execute(sql)
+            except Exception:
+                pass  # Column already exists
         await db.commit()
 
 
