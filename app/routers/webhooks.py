@@ -209,6 +209,30 @@ async def dashboard(
     }
 
 
+@router.get("/admin/tiers")
+async def get_tiers(
+    request: Request,
+    x_admin_key: str = Header(...),
+):
+    """View all tier configurations with their model/provider access rules."""
+    _verify_admin(request, x_admin_key)
+    tier_config = request.app.state.tier_config
+
+    tiers = {}
+    for name, tier in tier_config.tiers.items():
+        tiers[name] = {
+            "display_name": tier.display_name,
+            "daily_token_limit": tier.daily_token_limit,
+            "daily_cost_limit_usd": tier.daily_cost_limit_usd,
+            "requests_per_minute": tier.requests_per_minute,
+            "allowed_providers": tier.allowed_providers,
+            "allowed_models": tier.allowed_models,
+            "max_images_per_request": tier.max_images_per_request,
+        }
+
+    return {"tiers": tiers}
+
+
 @router.get("/admin/users")
 async def list_users(
     request: Request,

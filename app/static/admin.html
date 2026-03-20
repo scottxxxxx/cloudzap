@@ -110,8 +110,30 @@
     padding: 6px 10px; border-radius: 6px; font-size: 13px;
   }
 
+  /* Tier cards */
+  .tier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .tier-card h4 { font-size: 18px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .tier-card .tier-limits { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .tier-card .limit { font-size: 12px; }
+  .tier-card .limit .lbl { color: var(--text-dim); }
+  .tier-card .limit .lval { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tier-card .model-list { font-size: 12px; color: var(--text-dim); }
+  .tier-card .model-list .model-tag {
+    display: inline-block; background: rgba(88,166,255,0.1); color: var(--accent);
+    padding: 2px 8px; border-radius: 4px; margin: 2px 4px 2px 0; font-family: 'SF Mono', Menlo, monospace; font-size: 11px;
+  }
+  .tier-card .model-list .wildcard { background: rgba(63,185,80,0.15); color: var(--green); }
+  .simulate-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    padding: 5px 12px; border-radius: 5px; cursor: pointer; font-size: 12px; margin-top: 10px;
+  }
+  .simulate-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .simulate-btn.active { border-color: var(--green); color: var(--green); background: rgba(63,185,80,0.1); }
+
   @media (max-width: 600px) {
     .cards { grid-template-columns: repeat(2, 1fr); }
+    .tier-grid { grid-template-columns: 1fr; }
     body { padding: 12px; }
   }
 </style>
@@ -149,6 +171,7 @@
     <div class="tab active" onclick="switchTab('overview')">Overview</div>
     <div class="tab" onclick="switchTab('models')">Models</div>
     <div class="tab" onclick="switchTab('users')">Users</div>
+    <div class="tab" onclick="switchTab('tiers')">Tiers</div>
     <div class="tab" onclick="switchTab('latency')">Latency</div>
   </div>
 
@@ -176,6 +199,19 @@
     <div class="table-wrap"><table id="user-table"><thead><tr>
       <th>Email</th><th>Tier</th><th>Requests</th><th>Tokens</th><th>Cost</th><th>Last Active</th>
     </tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <!-- Tiers -->
+  <div id="tab-tiers" class="section">
+    <h3>Subscription Tiers</h3>
+    <div class="tier-grid" id="tier-grid"></div>
+    <div style="margin-top:8px;">
+      <h3>Simulate Tier</h3>
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">
+        Temporarily switch your account to a different tier to test model access and limits.
+        Your actual tier is shown with a green badge.
+      </p>
+    </div>
   </div>
 
   <!-- Latency -->
@@ -231,12 +267,26 @@ function card(label, value, cls, sub) {
   return `<div class="card"><div class="label">${label}</div><div class="value ${cls||''}">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
 }
 
+let currentUserTier = '';
+let currentUserId = '';
+
 async function refresh() {
   const days = document.getElementById('period').value;
-  const [dash, users] = await Promise.all([
+  const [dash, users, tiers] = await Promise.all([
     fetch(`${BASE}/webhooks/admin/dashboard?days=${days}`, {headers:{'X-Admin-Key':adminKey}}).then(r=>r.json()),
     fetch(`${BASE}/webhooks/admin/users`, {headers:{'X-Admin-Key':adminKey}}).then(r=>r.json()),
+    fetch(`${BASE}/webhooks/admin/tiers`, {headers:{'X-Admin-Key':adminKey}}).then(r=>r.json()),
   ]);
+
+  // Track current user for simulate
+  if (users.users.length > 0) {
+    const me = users.users[0]; // First user (sorted by created_at desc)
+    currentUserTier = me.tier;
+    currentUserId = me.id;
+  }
+
+  // Render tiers
+  renderTiers(tiers.tiers);
 
   const u = dash.usage, t = dash.today;
   document.getElementById('period-label').textContent = days == 1 ? 'Today (detailed)' : `Last ${days} Days`;
@@ -289,6 +339,72 @@ async function refresh() {
     : '<div style="padding:20px;color:var(--text-dim);text-align:center">No latency data yet</div>';
 
   document.getElementById('dash-subtitle').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+}
+
+function renderTiers(tiers) {
+  const grid = document.getElementById('tier-grid');
+  const tierColors = { free: 'var(--text-dim)', subscriber: 'var(--green)', admin: 'var(--purple)' };
+
+  grid.innerHTML = Object.entries(tiers).map(([name, t]) => {
+    const isCurrentTier = name === currentUserTier;
+    const color = tierColors[name] || 'var(--accent)';
+    const tokenLimit = t.daily_token_limit === -1 ? 'Unlimited' : fmt(t.daily_token_limit);
+    const costLimit = t.daily_cost_limit_usd === -1 ? 'Unlimited' : '$' + t.daily_cost_limit_usd.toFixed(2);
+
+    const providerTags = t.allowed_providers.map(p =>
+      `<span class="model-tag ${p === '*' ? 'wildcard' : ''}">${p === '*' ? 'All Providers' : p}</span>`
+    ).join('');
+
+    const modelTags = t.allowed_models.map(m =>
+      `<span class="model-tag ${m === '*' ? 'wildcard' : ''}">${m === '*' ? 'All Models' : m}</span>`
+    ).join('');
+
+    return `<div class="tier-card" style="border-color:${isCurrentTier ? 'var(--green)' : 'var(--border)'}">
+      <h4>
+        <span style="color:${color}">${t.display_name}</span>
+        ${isCurrentTier ? '<span class="badge subscriber">Current</span>' : ''}
+      </h4>
+      <div class="tier-limits">
+        <div class="limit"><div class="lbl">Daily Tokens</div><div class="lval">${tokenLimit}</div></div>
+        <div class="limit"><div class="lbl">Daily Cost</div><div class="lval">${costLimit}</div></div>
+        <div class="limit"><div class="lbl">Rate Limit</div><div class="lval">${t.requests_per_minute} RPM</div></div>
+        <div class="limit"><div class="lbl">Images/Request</div><div class="lval">${t.max_images_per_request}</div></div>
+      </div>
+      <div class="model-list">
+        <div class="lbl" style="margin-bottom:4px">Providers</div>
+        ${providerTags}
+      </div>
+      <div class="model-list" style="margin-top:8px">
+        <div class="lbl" style="margin-bottom:4px">Models</div>
+        ${modelTags}
+      </div>
+      <button class="simulate-btn ${isCurrentTier ? 'active' : ''}" onclick="simulateTier('${name}')">
+        ${isCurrentTier ? 'Active' : 'Simulate'}
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function simulateTier(tierName) {
+  if (!currentUserId) { alert('No user found'); return; }
+  if (tierName === currentUserTier) return;
+
+  const ok = confirm('Switch your account to the "' + tierName + '" tier? This changes your actual tier — you can switch back anytime.');
+  if (!ok) return;
+
+  const resp = await fetch(`${BASE}/webhooks/admin/set-tier`, {
+    method: 'POST',
+    headers: {'X-Admin-Key': adminKey, 'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: currentUserId, tier: tierName}),
+  });
+
+  if (resp.ok) {
+    currentUserTier = tierName;
+    refresh();
+  } else {
+    const err = await resp.json();
+    alert('Failed: ' + (err.detail || 'Unknown error'));
+  }
 }
 </script>
 </body>
