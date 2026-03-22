@@ -367,8 +367,7 @@ function renderTiers(tiers) {
   grid.innerHTML = Object.entries(tiers).map(([name, t]) => {
     const isCurrentTier = name === currentUserTier;
     const color = tierColors[name] || 'var(--accent)';
-    const tokenLimit = t.daily_token_limit === -1 ? 'Unlimited' : fmt(t.daily_token_limit);
-    const costLimit = t.daily_cost_limit_usd === -1 ? 'Unlimited' : '$' + t.daily_cost_limit_usd.toFixed(2);
+    const monthlyCost = t.monthly_cost_limit_usd === -1 ? 'Unlimited' : '$' + t.monthly_cost_limit_usd.toFixed(2);
 
     const providerTags = t.allowed_providers.map(p =>
       `<span class="model-tag ${p === '*' ? 'wildcard' : ''}">${p === '*' ? 'All Providers' : p}</span>`
@@ -385,8 +384,7 @@ function renderTiers(tiers) {
       </h4>
       <div class="tier-limits">
         <div class="limit"><div class="lbl">Default Model</div><div class="lval" style="font-size:11px;font-family:monospace">${t.default_model || 'none'}</div></div>
-        <div class="limit"><div class="lbl">Daily Cost</div><div class="lval">${costLimit}</div></div>
-        <div class="limit"><div class="lbl">Daily Tokens</div><div class="lval">${tokenLimit}</div></div>
+        <div class="limit"><div class="lbl">Monthly Limit</div><div class="lval">${monthlyCost}</div></div>
         <div class="limit"><div class="lbl">Rate Limit</div><div class="lval">${t.requests_per_minute} RPM</div></div>
         <div class="limit"><div class="lbl">Images/Request</div><div class="lval">${t.max_images_per_request}</div></div>
       </div>
