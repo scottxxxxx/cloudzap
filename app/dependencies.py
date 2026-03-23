@@ -48,6 +48,8 @@ async def get_current_user(
         monthly_used_usd=float(row["monthly_used_usd"] or 0),
         overage_balance_usd=float(row["overage_balance_usd"] or 0),
         allocation_resets_at=row["allocation_resets_at"],
+        simulated_tier=row["simulated_tier"],
+        simulated_exhausted=bool(row["simulated_exhausted"]),
     )
 
     if not user.is_active:

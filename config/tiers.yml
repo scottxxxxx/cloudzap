@@ -1,5 +1,15 @@
 # =============================================================================
-# CloudZap Subscription Tiers
+# CloudZap Subscription Tiers — SINGLE SOURCE OF TRUTH
+#
+# This file drives:
+#   1. Server-side enforcement (model access, rate limits, quotas)
+#   2. iOS app display via GET /v1/tiers (descriptions, feature_bullets, gating)
+#   3. iOS app constraints via GET /v1/usage/me (summary, images, features)
+#
+# Feature gating uses three states (defined in features.yml):
+#   enabled  — Feature fully active (check + apply)
+#   teaser   — Run check, return metadata, don't apply (for upgrade nudges)
+#   disabled — Don't run at all
 #
 # Pricing basis: 2x markup on average user cost
 #   Haiku 4.5:  ~$0.05/hr avg, ~$0.10/hr power user (10-min auto-summary)
@@ -19,6 +29,7 @@
 tiers:
   free:
     display_name: "Free"
+    description: "Try AI-powered meeting assistance with a small free credit."
     default_model: "anthropic/claude-haiku-4-5-20251001"
     monthly_cost_limit_usd: 0.05
     daily_cost_limit_usd: -1
@@ -31,10 +42,19 @@ tiers:
     allowed_models:
       - "claude-haiku-4-5-20251001"
     max_images_per_request: 1
+    hours_per_month: 1
     storekit_product_id: ""
+    features:
+      context_quilt: "disabled"
+    feature_bullets:
+      - "~1 hour of AI assistance"
+      - "Claude Haiku — fast and capable"
+      - "Auto-summaries every 10 min"
+      - "1 image per query"
 
   standard:
     display_name: "Standard"
+    description: "Monthly AI meeting assistance for regular use."
     default_model: "anthropic/claude-haiku-4-5-20251001"
     monthly_cost_limit_usd: 1.25
     daily_cost_limit_usd: -1
@@ -47,10 +67,19 @@ tiers:
     allowed_models:
       - "claude-haiku-4-5-20251001"
     max_images_per_request: 1
+    hours_per_month: 25
     storekit_product_id: "com.shouldersurf.standard.monthly"
+    features:
+      context_quilt: "teaser"
+    feature_bullets:
+      - "25 hours/month of AI assistance"
+      - "Claude Haiku — fast and capable"
+      - "Auto-summaries every 10 min"
+      - "1 image per query"
 
   pro:
     display_name: "Pro"
+    description: "More hours, image analysis, and meeting memory."
     default_model: "anthropic/claude-haiku-4-5-20251001"
     monthly_cost_limit_usd: 2.50
     daily_cost_limit_usd: -1
@@ -63,10 +92,20 @@ tiers:
     allowed_models:
       - "claude-haiku-4-5-20251001"
     max_images_per_request: 2
+    hours_per_month: 50
     storekit_product_id: "com.shouldersurf.pro.monthly"
+    features:
+      context_quilt: "enabled"
+    feature_bullets:
+      - "50 hours/month of AI assistance"
+      - "Claude Haiku — fast and capable"
+      - "Auto-summaries every 10 min"
+      - "2 images per query"
+      - "Context Quilt — cross-meeting memory"
 
   ultra:
     display_name: "Ultra"
+    description: "Our smartest model with full summary control."
     default_model: "anthropic/claude-sonnet-4-6"
     monthly_cost_limit_usd: 4.75
     daily_cost_limit_usd: -1
@@ -80,10 +119,20 @@ tiers:
       - "claude-sonnet-4-6"
       - "claude-haiku-4-5-20251001"
     max_images_per_request: 3
+    hours_per_month: 25
     storekit_product_id: "com.shouldersurf.ultra.monthly"
+    features:
+      context_quilt: "enabled"
+    feature_bullets:
+      - "25 hours/month of AI assistance"
+      - "Claude Sonnet — our smartest model"
+      - "Full or delta summaries (your choice)"
+      - "3 images per query"
+      - "Context Quilt — cross-meeting memory"
 
   ultra_max:
     display_name: "Ultra Max"
+    description: "Maximum capacity with our smartest model."
     default_model: "anthropic/claude-sonnet-4-6"
     monthly_cost_limit_usd: 9.50
     daily_cost_limit_usd: -1
@@ -97,10 +146,20 @@ tiers:
       - "claude-sonnet-4-6"
       - "claude-haiku-4-5-20251001"
     max_images_per_request: 5
+    hours_per_month: 50
     storekit_product_id: "com.shouldersurf.ultramax.monthly"
+    features:
+      context_quilt: "enabled"
+    feature_bullets:
+      - "50 hours/month of AI assistance"
+      - "Claude Sonnet — our smartest model"
+      - "Full or delta summaries (your choice)"
+      - "5 images per query"
+      - "Context Quilt — cross-meeting memory"
 
   admin:
     display_name: "Admin"
+    description: "Internal admin tier — unlimited access."
     default_model: "anthropic/claude-sonnet-4-6"
     monthly_cost_limit_usd: -1
     daily_cost_limit_usd: -1
@@ -113,4 +172,11 @@ tiers:
     allowed_models:
       - "*"
     max_images_per_request: 10
+    hours_per_month: -1
     storekit_product_id: ""
+    features:
+      context_quilt: "enabled"
+    feature_bullets:
+      - "Unlimited AI assistance"
+      - "All models and providers"
+      - "Context Quilt — cross-meeting memory"

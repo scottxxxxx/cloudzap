@@ -1,0 +1,38 @@
+"""
+Generic feature gating model.
+
+Features have three states per tier:
+  - enabled: fully active (check + apply)
+  - teaser: run check, return metadata, skip apply (for upgrade nudges)
+  - disabled: don't run at all
+"""
+
+from enum import Enum
+
+import yaml
+from pydantic import BaseModel
+
+
+class FeatureState(str, Enum):
+    enabled = "enabled"
+    teaser = "teaser"
+    disabled = "disabled"
+
+
+class FeatureDefinition(BaseModel):
+    display_name: str
+    description: str = ""
+    teaser_description: str = ""
+    upgrade_cta: str = ""
+    category: str = ""
+    service_module: str = ""
+
+
+class FeatureConfig(BaseModel):
+    features: dict[str, FeatureDefinition]
+
+
+def load_feature_config(path: str) -> FeatureConfig:
+    with open(path) as f:
+        data = yaml.safe_load(f)
+    return FeatureConfig(**data)

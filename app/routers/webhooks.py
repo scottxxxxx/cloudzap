@@ -20,6 +20,12 @@ class SetTierRequest(BaseModel):
     tier: str
 
 
+class SimulateTierRequest(BaseModel):
+    user_id: str
+    tier: str | None = None  # null to clear simulation
+    exhausted: bool = True
+
+
 @router.post("/admin/set-tier")
 async def set_tier(
     body: SetTierRequest,
@@ -103,6 +109,74 @@ async def set_tier(
         "overage_balance_usd": round(new_overage, 4),
         "carryover": carryover_detail,
         "allocation_resets_at": resets_at,
+    }
+
+
+@router.post("/admin/simulate-tier")
+async def simulate_tier(
+    body: SimulateTierRequest,
+    request: Request,
+    db: aiosqlite.Connection = Depends(get_db),
+    x_admin_key: str = Header(...),
+):
+    """Toggle tier simulation for testing upgrade flows.
+
+    Sets a temporary tier override on a user without changing their real tier.
+    When active, the user sees the simulated tier's constraints, and if
+    exhausted=true, all chat requests return 429 allocation_exhausted.
+
+    Send tier=null to clear the simulation and restore the real tier.
+    """
+    _verify_admin(request, x_admin_key)
+
+    tier_config = request.app.state.tier_config
+
+    # Validate tier if setting simulation
+    if body.tier is not None and body.tier not in tier_config.tiers:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown tier: {body.tier}. Available: {list(tier_config.tiers.keys())}",
+        )
+
+    # Verify user exists
+    cursor = await db.execute(
+        "SELECT id, tier, simulated_tier FROM users WHERE id = ?",
+        (body.user_id,),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    real_tier = row["tier"]
+
+    if body.tier is None:
+        # Clear simulation
+        await db.execute(
+            "UPDATE users SET simulated_tier = NULL, simulated_exhausted = 0 WHERE id = ?",
+            (body.user_id,),
+        )
+        await db.commit()
+        return {
+            "status": "ok",
+            "simulation": "cleared",
+            "user_id": body.user_id,
+            "real_tier": real_tier,
+        }
+
+    # Activate simulation
+    await db.execute(
+        "UPDATE users SET simulated_tier = ?, simulated_exhausted = ? WHERE id = ?",
+        (body.tier, 1 if body.exhausted else 0, body.user_id),
+    )
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "simulation": "active",
+        "user_id": body.user_id,
+        "real_tier": real_tier,
+        "simulated_tier": body.tier,
+        "exhausted": body.exhausted,
     }
 
 
@@ -476,6 +550,7 @@ async def list_users(
 
     cursor = await db.execute(
         """SELECT u.id, u.apple_sub, u.email, u.tier, u.created_at, u.is_active,
+            u.simulated_tier, u.simulated_exhausted,
             (SELECT COUNT(*) FROM usage_log l WHERE l.user_id = u.id AND l.status = 'success') as total_requests,
             (SELECT COALESCE(SUM(COALESCE(l2.input_tokens,0)) + SUM(COALESCE(l2.output_tokens,0)), 0)
              FROM usage_log l2 WHERE l2.user_id = u.id AND l2.status = 'success') as total_tokens,
@@ -493,10 +568,12 @@ async def list_users(
             "tier": r[3],
             "created_at": r[4],
             "is_active": bool(r[5]),
-            "total_requests": r[6],
-            "total_tokens": r[7],
-            "total_cost_usd": round(r[8], 4) if r[8] else 0,
-            "last_request": r[9],
+            "simulated_tier": r[6],
+            "simulated_exhausted": bool(r[7]),
+            "total_requests": r[8],
+            "total_tokens": r[9],
+            "total_cost_usd": round(r[10], 4) if r[10] else 0,
+            "last_request": r[11],
         }
         for r in await cursor.fetchall()
     ]

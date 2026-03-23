@@ -72,6 +72,9 @@ MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN monthly_used_usd REAL DEFAULT 0",
     "ALTER TABLE users ADD COLUMN overage_balance_usd REAL DEFAULT 0",
     "ALTER TABLE users ADD COLUMN allocation_resets_at TEXT",
+    # v4: Add tier simulation columns
+    "ALTER TABLE users ADD COLUMN simulated_tier TEXT",
+    "ALTER TABLE users ADD COLUMN simulated_exhausted INTEGER DEFAULT 0",
 ]
 
 

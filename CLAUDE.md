@@ -1,6 +1,6 @@
 # CLAUDE.md — CloudZap
 
-> **Last updated:** March 22, 2026
+> **Last updated:** March 23, 2026
 
 ## Project Overview
 
@@ -25,11 +25,12 @@
 
 ```
 app/
-├── main.py              # FastAPI app factory, lifespan, middleware
-├── config.py            # pydantic-settings with CZ_ env prefix
+├── main.py              # FastAPI app factory, lifespan (loads FeatureConfig), middleware
+├── config.py            # pydantic-settings with CZ_ env prefix, feature_config_path
 ├── database.py          # aiosqlite init + schema + migrations
 ├── dependencies.py      # get_current_user (JWT verification)
 ├── models/              # Pydantic request/response models
+│   ├── feature.py       # FeatureState enum, FeatureDefinition, FeatureConfig, load_feature_config()
 ├── routers/
 │   ├── auth.py          # POST /auth/apple, POST /auth/refresh
 │   ├── chat.py          # POST /v1/chat (with auto model routing)
@@ -47,7 +48,8 @@ app/
 ├── middleware/           # Request logging
 └── static/admin.html    # Web-based admin dashboard
 config/
-├── tiers.yml            # Subscription tier definitions
+├── tiers.yml            # Subscription tier definitions (features dict, feature_bullets, descriptions)
+├── features.yml         # Feature definitions with display metadata (display_name, description, teaser_description, upgrade_cta, category, service_module)
 └── providers.yml        # Provider registry (URLs, auth, models)
 ```
 
@@ -74,6 +76,22 @@ See **`/Users/scottguida/ShoulderSurf/Subscription_Tiers.md`** for the full tier
 5 tiers + admin, configured in `config/tiers.yml`. Model assignment is server-controlled — client sends `model: "auto"`, gateway substitutes the tier's `default_model`.
 
 Summary: free ($0.05), standard ($2.99), pro ($4.99), ultra ($9.99), ultra_max ($19.99). Haiku for free/standard/pro, Sonnet for ultra/ultra_max. 2x markup on avg user cost. Monthly cost-based allocation with overage credits at same rate. Dollar-value carryover on upgrade.
+
+### tiers.yml structure
+
+Each tier definition includes:
+- `default_model`, `max_images`, `summary_interval_minutes`, `image_resolution` — model routing & settings locks
+- `features: dict` — per-feature state (`enabled`, `teaser`, or `disabled`). Replaces the old `context_quilt_enabled: bool`
+- `feature_bullets: list[str]` — marketing bullet points for subscription UI (renamed from the old `features:` display list)
+- `description: str` — human-readable tier description
+- `hours_per_month: int` — monthly hour allocation
+
+### TierDefinition model (`app/models/tier.py`)
+
+`TierDefinition` exposes helper methods:
+- `feature_state(name) -> FeatureState` — returns the feature's state for this tier (defaults to `disabled`)
+- `is_feature_enabled(name) -> bool` — shorthand for `feature_state(name) == enabled`
+- `is_feature_teaser(name) -> bool` — shorthand for `feature_state(name) == teaser`
 
 ### Allocation tracking (TODO — next implementation phase)
 
@@ -115,7 +133,7 @@ When the iOS app's provider is set to CloudZap, these settings are locked:
 - **Pricing from LiteLLM**: Fetches model costs on startup (configurable URL via `CZ_PRICING_SOURCE_URL`). Computes billable tokens (subtracts cached), cost breakdown per request.
 - **Full usage passthrough**: All provider metadata captured in flexible `usage` dict — cached tokens, reasoning tokens, finish reason, etc. No hardcoded fields.
 - **SQLite + single uvicorn worker**: SQLite doesn't handle concurrent writes well. Single worker sufficient for MVP. Migration path: asyncpg + Postgres.
-- **YAML config, not database config**: Tier definitions and provider catalogs are version-controlled.
+- **YAML config, not database config**: Tier definitions, provider catalogs, and feature definitions are version-controlled. Feature states are per-tier in `tiers.yml`; feature metadata lives in `features.yml`.
 - **In-memory rate limiter**: Single worker means in-memory state is consistent. Resets on restart.
 - **Content never stored**: Prompts and responses are never persisted on the server — only token counts, costs, and metadata.
 - **Anthropic-only at launch**: Subscription users get Anthropic models only. BYOK users retain full multi-provider access in the iOS app.
@@ -131,6 +149,7 @@ Key variables:
 - `CZ_ADMIN_KEY` — Admin dashboard/API key
 - `CZ_PRICING_SOURCE_URL` — LiteLLM pricing JSON URL (default: GitHub raw)
 - `CZ_JWT_ACCESS_TOKEN_EXPIRE_MINUTES` — JWT lifetime (currently 1440 = 24h)
+- `feature_config_path` — path to features.yml (default: `config/features.yml`, set in `app/config.py`)
 
 ## Deployment
 
@@ -160,16 +179,17 @@ Key variables:
 | GET | `/admin` | None (key in UI) | Admin dashboard web UI |
 | POST | `/auth/apple` | None | Apple Sign In → JWT |
 | POST | `/auth/refresh` | None | Refresh token rotation |
-| POST | `/v1/chat` | Bearer JWT | Proxied LLM request (auto model routing) |
+| POST | `/v1/chat` | Bearer JWT | Proxied LLM request (auto model routing, generic feature gating) |
+| GET | `/v1/tiers` | None | Public tier catalog with features dict, feature_bullets, descriptions, and feature_definitions metadata (server-driven subscription UI) |
 | GET | `/v1/model-pricing` | None | Cached LiteLLM pricing JSON |
 | GET | `/webhooks/admin/dashboard` | X-Admin-Key | Usage stats, latency, top users |
 | GET | `/webhooks/admin/users` | X-Admin-Key | User list with lifetime stats |
 | GET | `/webhooks/admin/tiers` | X-Admin-Key | Tier config viewer |
 | POST | `/webhooks/admin/set-tier` | X-Admin-Key | Manual tier assignment |
+| GET | `/v1/usage/me` | Bearer JWT | User's allocation, overage, usage stats, `features` dict (per-tier feature states) |
 | GET | `/docs` | None | Swagger UI |
 
 **Planned endpoints:**
-- `GET /v1/usage/me` — Authenticated user's allocation, overage, usage stats
 - `POST /v1/add-credits` — Add overage credits after StoreKit purchase verification
 
 ## Reserved Route Namespaces
@@ -199,9 +219,44 @@ Web UI at `/admin` with tabs:
 
 Admin key: stored in `CZ_ADMIN_KEY` env var, persisted in browser localStorage.
 
+## Generic Feature Gating
+
+Features have **three states per tier**, configured in `config/tiers.yml`:
+
+| State | Behavior |
+|-------|----------|
+| **enabled** | Run the feature check, apply results to the query, capture on response |
+| **teaser** | Run the feature check, return metadata headers to client, but **skip applying** results. Used for upgrade nudges. Returns `X-CQ-Gated: true` header |
+| **disabled** | Feature doesn't run at all |
+
+### How it works
+
+1. **`config/features.yml`** defines each feature's metadata (display_name, description, teaser_description, upgrade_cta, category, service_module). Loaded at startup into `app.state.feature_config`.
+2. **`config/tiers.yml`** sets per-tier state for each feature under the tier's `features:` dict (e.g., `context_quilt: "teaser"`).
+3. **`POST /v1/chat`** checks each feature's state for the user's tier:
+   - `enabled` → run check + apply results + capture on response
+   - `teaser` → run check + return metadata headers + skip injection
+   - `disabled` → skip entirely
+4. **Client opt-out**: `ChatRequest.skip_teasers: list[str] | None` — client can suppress specific teaser features (e.g., after the user dismisses an upgrade prompt).
+
+### Adding a new feature
+
+1. Add an entry in `config/features.yml` with display metadata
+2. Add per-tier state in `config/tiers.yml` under each tier's `features:` dict
+3. Implement `check()`, `apply()`, `on_response()` functions in `app/services/<service_module>.py`
+
+### Kill switch
+
+Change a feature from `teaser` → `disabled` in `tiers.yml` and restart. No code changes needed.
+
 ## Context Quilt Integration
 
-CloudZap integrates with Context Quilt when `context_quilt: true` is in the ChatRequest.
+CloudZap integrates with Context Quilt as the first feature using the generic feature gating system. CQ runs when `context_quilt: true` is in the ChatRequest **and** the user's tier has CQ in `enabled` or `teaser` state.
+
+**3-state behavior:**
+- **enabled**: recall → inject context into system_prompt → capture query+response after LLM responds
+- **teaser**: recall → return `X-CQ-Matched`/`X-CQ-Entities` headers + `X-CQ-Gated: true` → skip injection → skip capture
+- **disabled**: skip entirely
 
 **Recall (pre-route, synchronous):**
 - Calls `POST {CQ_BASE_URL}/v1/recall` with the user's query text
@@ -216,11 +271,13 @@ CloudZap integrates with Context Quilt when `context_quilt: true` is in the Chat
 **Response headers (for ShoulderSurf UI indicator):**
 - `X-CQ-Matched`: number of entities matched (e.g., "3")
 - `X-CQ-Entities`: comma-separated entity names (e.g., "Bob Martinez,Widget 2.0")
+- `X-CQ-Gated`: `"true"` when CQ is in teaser mode (ran recall but didn't inject)
 
 **ChatRequest fields:**
 - `context_quilt: bool` — enable CQ for this request (default: false)
 - `meeting_id: str | None` — meeting UUID for CQ queue grouping
 - `project: str | None` — project name for CQ metadata
+- `skip_teasers: list[str] | None` — client-side opt-out for teaser features (e.g., `["context_quilt"]`)
 
 **Config:**
 - `CZ_CQ_BASE_URL` — CQ endpoint (e.g., `https://cq.shouldersurf.com`)

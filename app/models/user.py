@@ -13,6 +13,13 @@ class UserRecord(BaseModel):
     monthly_used_usd: float = 0
     overage_balance_usd: float = 0
     allocation_resets_at: str | None = None
+    simulated_tier: str | None = None
+    simulated_exhausted: bool = False
+
+    @property
+    def effective_tier(self) -> str:
+        """Return simulated_tier if active, otherwise real tier."""
+        return self.simulated_tier or self.tier
 
 
 class UserPublic(BaseModel):

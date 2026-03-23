@@ -16,6 +16,8 @@ class ChatRequest(BaseModel):
     context_quilt: bool = False          # Enable CQ recall + capture for this request
     meeting_id: str | None = None        # Meeting UUID for CQ queue grouping
     project: str | None = None           # Project name for CQ metadata
+    # Generic feature gating
+    skip_teasers: list[str] | None = None  # Feature names to skip teaser checks for
 
 
 class ChatResponse(BaseModel):
