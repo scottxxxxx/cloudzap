@@ -12,6 +12,10 @@ class ChatRequest(BaseModel):
     prompt_mode: str | None = None       # "Assist", "Summarize", "Action Items", "Coach", etc.
     image_count: int | None = None       # Explicit count (in case images not sent through gateway)
     session_duration_sec: int | None = None  # How long the meeting session has been running
+    # Context Quilt integration
+    context_quilt: bool = False          # Enable CQ recall + capture for this request
+    meeting_id: str | None = None        # Meeting UUID for CQ queue grouping
+    project: str | None = None           # Project name for CQ metadata
 
 
 class ChatResponse(BaseModel):

@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # Admin
     admin_key: str = ""
 
+    # Context Quilt integration
+    cq_base_url: str = ""              # e.g., "https://cq.shouldersurf.com"
+    cq_app_id: str = "cloudzap"        # App identifier for CQ
+    cq_recall_timeout_ms: int = 200    # Max wait for CQ recall (ms)
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./data/cloudzap.db"
 

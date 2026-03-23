@@ -1,3 +1,4 @@
+import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -10,6 +11,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.chat import ChatRequest, ChatResponse
 from app.models.user import UserRecord
+from app.services import context_quilt as cq
 
 router = APIRouter()
 
@@ -239,6 +241,30 @@ async def chat(
     # 5. Monthly allocation + overage check
     monthly_used, overage_balance = await usage_tracker.check_quota(db, user, tier)
 
+    # 5.5. Context Quilt recall (if enabled)
+    cq_result = {"context": "", "matched_entities": [], "patch_count": 0}
+    if body.context_quilt:
+        cq_metadata = {}
+        if body.project:
+            cq_metadata["project"] = body.project
+        cq_result = await cq.recall(
+            user_id=user.id,
+            text=body.user_content,
+            metadata=cq_metadata or None,
+        )
+        # Inject context into system prompt if CQ returned something
+        if cq_result.get("context"):
+            cq_context = cq_result["context"]
+            # Replace {{context_quilt}} placeholder if present, otherwise prepend
+            if "{{context_quilt}}" in body.system_prompt:
+                body = body.model_copy(update={
+                    "system_prompt": body.system_prompt.replace("{{context_quilt}}", cq_context)
+                })
+            else:
+                body = body.model_copy(update={
+                    "system_prompt": f"[CONTEXT FROM PREVIOUS MEETINGS]\n{cq_context}\n\n{body.system_prompt}"
+                })
+
     # 6. Route to provider
     start = time.monotonic()
     try:
@@ -271,6 +297,19 @@ async def chat(
     # 9. Log usage
     await usage_tracker.log_usage(db, user.id, body, response, elapsed_ms)
 
+    # 9.5. Context Quilt capture (async, non-blocking)
+    if body.context_quilt:
+        asyncio.create_task(cq.capture(
+            user_id=user.id,
+            interaction_type=body.call_type or "query",
+            content=body.user_content,
+            response=response.text,
+            meeting_id=body.meeting_id,
+            project=body.project,
+            call_type=body.call_type,
+            prompt_mode=body.prompt_mode,
+        ))
+
     # 10. Build response with allocation headers
     response_data = response.model_dump()
     json_response = JSONResponse(content=response_data)
@@ -284,5 +323,12 @@ async def chat(
         json_response.headers["X-Monthly-Used"] = f"{new_monthly_used:.4f}"
         json_response.headers["X-Monthly-Limit"] = f"{tier.monthly_cost_limit_usd:.2f}"
         json_response.headers["X-Overage-Balance"] = f"{overage_balance:.4f}"
+
+    # CQ response headers (for ShoulderSurf UI indicator)
+    if body.context_quilt:
+        matched = cq_result.get("matched_entities", [])
+        json_response.headers["X-CQ-Matched"] = str(len(matched))
+        if matched:
+            json_response.headers["X-CQ-Entities"] = ",".join(matched[:10])
 
     return json_response
