@@ -222,12 +222,21 @@
   <!-- Tiers -->
   <div id="tab-tiers" class="section">
     <h3>Subscription Tiers</h3>
+    <!-- Simulation banner (shown when active) -->
+    <div id="sim-banner" style="display:none;background:rgba(210,153,34,0.12);border:1px solid var(--orange);border-radius:8px;padding:12px 16px;margin-bottom:16px;justify-content:space-between;align-items:center;">
+      <div>
+        <span style="color:var(--orange);font-weight:600;">Simulation Active</span>
+        <span id="sim-banner-text" style="color:var(--text-dim);font-size:13px;margin-left:8px;"></span>
+      </div>
+      <button class="refresh-btn" style="border-color:var(--orange);color:var(--orange)" onclick="clearSimulation()">Clear Simulation</button>
+    </div>
     <div class="tier-grid" id="tier-grid"></div>
     <div style="margin-top:8px;">
-      <h3>Simulate Tier</h3>
+      <h3>Tier Simulation</h3>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">
-        Temporarily switch your account to a different tier to test model access and limits.
-        Your actual tier is shown with a green badge.
+        Simulate a tier to test the upgrade flow end-to-end.
+        <strong>Simulate (exhausted)</strong> makes the iOS app see an exhausted allocation — triggering the upgrade prompt on the next query.
+        Your real tier and usage data are preserved.
       </p>
     </div>
   </div>
@@ -287,6 +296,7 @@ function card(label, value, cls, sub) {
 
 let currentUserTier = '';
 let currentUserId = '';
+let simulationState = null;  // {tier, exhausted} or null
 
 async function refresh() {
   const days = document.getElementById('period').value;
@@ -301,7 +311,15 @@ async function refresh() {
     const me = users.users[0]; // First user (sorted by created_at desc)
     currentUserTier = me.tier;
     currentUserId = me.id;
+    // Restore simulation state from server
+    if (me.simulated_tier) {
+      simulationState = {tier: me.simulated_tier, exhausted: me.simulated_exhausted};
+    } else {
+      simulationState = null;
+    }
+    updateSimBanner();
   }
+  await checkSimulationState();
 
   // Render tiers
   renderTiers(tiers.tiers);
@@ -366,6 +384,7 @@ function renderTiers(tiers) {
 
   grid.innerHTML = Object.entries(tiers).map(([name, t]) => {
     const isCurrentTier = name === currentUserTier;
+    const isSimulatedTier = simulationState && simulationState.tier === name;
     const color = tierColors[name] || 'var(--accent)';
     const monthlyCost = t.monthly_cost_limit_usd === -1 ? 'Unlimited' : '$' + t.monthly_cost_limit_usd.toFixed(2);
 
@@ -377,10 +396,28 @@ function renderTiers(tiers) {
       `<span class="model-tag ${m === '*' ? 'wildcard' : ''}">${m === '*' ? 'All Models' : m}</span>`
     ).join('');
 
-    return `<div class="tier-card" style="border-color:${isCurrentTier ? 'var(--green)' : 'var(--border)'}">
+    let borderColor = 'var(--border)';
+    if (isSimulatedTier) borderColor = 'var(--orange)';
+    else if (isCurrentTier) borderColor = 'var(--green)';
+
+    // Simulation buttons
+    let simButtons = '';
+    if (isCurrentTier && !simulationState) {
+      simButtons = `<button class="simulate-btn active">Active</button>`;
+    } else if (isSimulatedTier) {
+      simButtons = `<button class="simulate-btn" style="border-color:var(--orange);color:var(--orange)" onclick="clearSimulation()">Clear Simulation</button>`;
+    } else {
+      simButtons = `
+        <button class="simulate-btn" onclick="simulateTier('${name}', true)">Simulate (exhausted)</button>
+        <button class="simulate-btn" onclick="simulateTier('${name}', false)" style="margin-left:4px">Simulate</button>
+      `;
+    }
+
+    return `<div class="tier-card" style="border-color:${borderColor}">
       <h4>
         <span style="color:${color}">${t.display_name}</span>
-        ${isCurrentTier ? '<span class="badge subscriber">Current</span>' : ''}
+        ${isCurrentTier ? '<span class="badge subscriber">Real Tier</span>' : ''}
+        ${isSimulatedTier ? '<span class="badge" style="background:rgba(210,153,34,0.15);color:var(--orange)">Simulated</span>' : ''}
       </h4>
       <div class="tier-limits">
         <div class="limit"><div class="lbl">Default Model</div><div class="lval" style="font-size:11px;font-family:monospace">${t.default_model || 'none'}</div></div>
@@ -396,9 +433,9 @@ function renderTiers(tiers) {
         <div class="lbl" style="margin-bottom:4px">Models</div>
         ${modelTags}
       </div>
-      <button class="simulate-btn ${isCurrentTier ? 'active' : ''}" onclick="simulateTier('${name}')">
-        ${isCurrentTier ? 'Active' : 'Simulate'}
-      </button>
+      <div style="margin-top:10px;display:flex;gap:4px;flex-wrap:wrap">
+        ${simButtons}
+      </div>
     </div>`;
   }).join('');
 }
@@ -448,25 +485,57 @@ async function showUserDetail(userId, email) {
   </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-dim)">No data</td></tr>';
 }
 
-async function simulateTier(tierName) {
+async function simulateTier(tierName, exhausted) {
   if (!currentUserId) { alert('No user found'); return; }
-  if (tierName === currentUserTier) return;
 
-  const ok = confirm('Switch your account to the "' + tierName + '" tier? This changes your actual tier — you can switch back anytime.');
+  const mode = exhausted ? 'exhausted allocation' : 'normal allocation';
+  const ok = confirm(`Simulate "${tierName}" tier (${mode}) for your account?\n\nYour real tier (${currentUserTier}) is preserved — this only affects what the iOS app sees.`);
   if (!ok) return;
 
-  const resp = await fetch(`${BASE}/webhooks/admin/set-tier`, {
+  const resp = await fetch(`${BASE}/webhooks/admin/simulate-tier`, {
     method: 'POST',
     headers: {'X-Admin-Key': adminKey, 'Content-Type': 'application/json'},
-    body: JSON.stringify({user_id: currentUserId, tier: tierName}),
+    body: JSON.stringify({user_id: currentUserId, tier: tierName, exhausted: exhausted}),
   });
 
   if (resp.ok) {
-    currentUserTier = tierName;
+    simulationState = {tier: tierName, exhausted: exhausted};
+    updateSimBanner();
     refresh();
   } else {
     const err = await resp.json();
     alert('Failed: ' + (err.detail || 'Unknown error'));
+  }
+}
+
+async function clearSimulation() {
+  if (!currentUserId) return;
+
+  const resp = await fetch(`${BASE}/webhooks/admin/simulate-tier`, {
+    method: 'POST',
+    headers: {'X-Admin-Key': adminKey, 'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: currentUserId, tier: null}),
+  });
+
+  if (resp.ok) {
+    simulationState = null;
+    updateSimBanner();
+    refresh();
+  } else {
+    const err = await resp.json();
+    alert('Failed: ' + (err.detail || 'Unknown error'));
+  }
+}
+
+function updateSimBanner() {
+  const banner = document.getElementById('sim-banner');
+  if (simulationState) {
+    banner.style.display = 'flex';
+    const mode = simulationState.exhausted ? 'exhausted' : 'active';
+    document.getElementById('sim-banner-text').textContent =
+      `Simulating ${simulationState.tier} tier (${mode}). Real tier: ${currentUserTier}. iOS app will see ${simulationState.tier} constraints.`;
+  } else {
+    banner.style.display = 'none';
   }
 }
 </script>

@@ -74,6 +74,27 @@ class UsageTracker:
         if tier.monthly_cost_limit_usd == -1:
             return 0.0, 0.0  # Unlimited (admin)
 
+        # Simulation: force allocation exhausted
+        if user.simulated_exhausted:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "allocation_exhausted",
+                    "message": (
+                        f"Monthly allocation exhausted "
+                        f"(${tier.monthly_cost_limit_usd:.2f}/${tier.monthly_cost_limit_usd:.2f}). "
+                        f"Purchase overage credits or upgrade your plan."
+                    ),
+                    "details": {
+                        "monthly_used": tier.monthly_cost_limit_usd,
+                        "monthly_limit": tier.monthly_cost_limit_usd,
+                        "overage_balance": 0.0,
+                        "fallback": "on_device",
+                        "simulated": True,
+                    },
+                },
+            )
+
         # Read user's allocation state
         cursor = await db.execute(
             "SELECT monthly_used_usd, overage_balance_usd FROM users WHERE id = ?",

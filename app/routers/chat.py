@@ -86,7 +86,9 @@ async def verify_receipt(
             monthly_used_usd = 0,
             overage_balance_usd = ?,
             allocation_resets_at = ?,
-            updated_at = ?
+            updated_at = ?,
+            simulated_tier = NULL,
+            simulated_exhausted = 0
            WHERE id = ?""",
         (
             new_tier_name,
@@ -117,19 +119,35 @@ async def usage_me(
 ):
     """Get the authenticated user's current allocation, overage balance, and usage."""
     tier_config = request.app.state.tier_config
-    tier = tier_config.tiers.get(user.tier)
+    effective_tier_name = user.effective_tier
+    tier = tier_config.tiers.get(effective_tier_name)
 
     monthly_limit = tier.monthly_cost_limit_usd if tier else -1
 
-    # Read allocation state
+    # When simulating exhausted, override allocation values
+    is_simulated = user.simulated_tier is not None
+    sim_exhausted = user.simulated_exhausted
+
+    if sim_exhausted:
+        monthly_used = monthly_limit
+        overage_balance = 0.0
+    else:
+        # Read allocation state
+        cursor = await db.execute(
+            """SELECT monthly_used_usd, overage_balance_usd, allocation_resets_at
+               FROM users WHERE id = ?""",
+            (user.id,),
+        )
+        row = await cursor.fetchone()
+        monthly_used = float(row["monthly_used_usd"] or 0)
+        overage_balance = float(row["overage_balance_usd"] or 0)
+
+    # Read resets_at regardless (always from real data)
     cursor = await db.execute(
-        """SELECT monthly_used_usd, overage_balance_usd, allocation_resets_at
-           FROM users WHERE id = ?""",
+        "SELECT allocation_resets_at FROM users WHERE id = ?",
         (user.id,),
     )
     row = await cursor.fetchone()
-    monthly_used = float(row["monthly_used_usd"] or 0)
-    overage_balance = float(row["overage_balance_usd"] or 0)
     resets_at = row["allocation_resets_at"]
 
     # This month's usage stats
@@ -153,9 +171,9 @@ async def usage_me(
     hours_limit = monthly_limit / model_cost_per_hour if monthly_limit > 0 else -1
     overage_hours = overage_balance / model_cost_per_hour if model_cost_per_hour > 0 else 0
 
-    return {
-        "tier": user.tier,
-        "tier_display_name": tier.display_name if tier else user.tier,
+    result = {
+        "tier": effective_tier_name,
+        "tier_display_name": tier.display_name if tier else effective_tier_name,
         "allocation": {
             "monthly_limit_usd": monthly_limit,
             "monthly_used_usd": round(monthly_used, 4),
@@ -182,6 +200,61 @@ async def usage_me(
         "summary_mode": tier.summary_mode if tier else "delta",
         "summary_interval_minutes": tier.summary_interval_minutes if tier else 10,
         "max_images_per_request": tier.max_images_per_request if tier else 0,
+        "features": tier.features if tier else {},
+    }
+
+    if is_simulated:
+        result["simulation"] = {
+            "active": True,
+            "simulated_tier": user.simulated_tier,
+            "real_tier": user.tier,
+            "exhausted": sim_exhausted,
+        }
+
+    return result
+
+
+@router.get("/tiers")
+async def list_tiers(request: Request):
+    """Return the full tier catalog for display in the iOS subscription UI.
+
+    Public endpoint — no auth required. Returns descriptions, feature states,
+    feature bullets, and constraint details for each tier. The iOS app
+    uses this to render server-driven subscription screens instead of
+    relying on hardcoded StoreKit descriptions.
+    """
+    tier_config = request.app.state.tier_config
+    feature_config = request.app.state.feature_config
+
+    # Build feature metadata (display names, descriptions, CTAs)
+    feature_metadata = {}
+    for fname, fdef in feature_config.features.items():
+        feature_metadata[fname] = {
+            "display_name": fdef.display_name,
+            "description": fdef.description,
+            "teaser_description": fdef.teaser_description,
+            "upgrade_cta": fdef.upgrade_cta,
+            "category": fdef.category,
+        }
+
+    tiers_result = {}
+    for name, tier in tier_config.tiers.items():
+        if name == "admin":
+            continue  # Don't expose admin tier to clients
+        tiers_result[name] = {
+            "display_name": tier.display_name,
+            "description": tier.description,
+            "hours_per_month": tier.hours_per_month,
+            "summary_mode": tier.summary_mode,
+            "summary_interval_minutes": tier.summary_interval_minutes,
+            "max_images_per_request": tier.max_images_per_request,
+            "features": tier.features,
+            "feature_bullets": tier.feature_bullets,
+            "storekit_product_id": tier.storekit_product_id,
+        }
+    return {
+        "tiers": tiers_result,
+        "feature_definitions": feature_metadata,
     }
 
 
@@ -199,12 +272,13 @@ async def chat(
     usage_tracker = request.app.state.usage_tracker
     pricing = request.app.state.pricing
 
-    # 1. Look up tier
-    tier = tier_config.tiers.get(user.tier)
+    # 1. Look up tier (respects simulation override)
+    effective_tier_name = user.effective_tier
+    tier = tier_config.tiers.get(effective_tier_name)
     if not tier:
         raise HTTPException(
             status_code=500,
-            detail={"code": "invalid_request", "message": f"Unknown tier: {user.tier}"},
+            detail={"code": "invalid_request", "message": f"Unknown tier: {effective_tier_name}"},
         )
 
     # 2. Resolve "auto" model to tier's default
@@ -241,9 +315,24 @@ async def chat(
     # 5. Monthly allocation + overage check
     monthly_used, overage_balance = await usage_tracker.check_quota(db, user, tier)
 
-    # 5.5. Context Quilt recall (if enabled)
+    # 5.5. Context Quilt — generic feature gating
+    #
+    # Feature states from tiers.yml:
+    #   enabled  → recall + inject into prompt + capture on response
+    #   teaser   → recall only (return metadata for upgrade nudge, don't inject)
+    #   disabled → skip entirely
+    #
+    # Client can send skip_teasers: ["context_quilt"] to opt out of teaser
+    # checks after it has already shown the nudge this session.
+
+    cq_state = tier.feature_state("context_quilt")
     cq_result = {"context": "", "matched_entities": [], "patch_count": 0}
-    if body.context_quilt:
+    cq_gated = False  # True when teaser ran but results not injected
+
+    skip_teasers = set(body.skip_teasers or [])
+
+    if cq_state == "enabled" and body.context_quilt:
+        # Full CQ: recall + inject
         cq_metadata = {}
         if body.project:
             cq_metadata["project"] = body.project
@@ -252,10 +341,8 @@ async def chat(
             text=body.user_content,
             metadata=cq_metadata or None,
         )
-        # Inject context into system prompt if CQ returned something
         if cq_result.get("context"):
             cq_context = cq_result["context"]
-            # Replace {{context_quilt}} placeholder if present, otherwise prepend
             if "{{context_quilt}}" in body.system_prompt:
                 body = body.model_copy(update={
                     "system_prompt": body.system_prompt.replace("{{context_quilt}}", cq_context)
@@ -264,6 +351,19 @@ async def chat(
                 body = body.model_copy(update={
                     "system_prompt": f"[CONTEXT FROM PREVIOUS MEETINGS]\n{cq_context}\n\n{body.system_prompt}"
                 })
+
+    elif cq_state == "teaser" and "context_quilt" not in skip_teasers:
+        # Teaser: recall for metadata only, don't inject into prompt
+        cq_metadata = {}
+        if body.project:
+            cq_metadata["project"] = body.project
+        cq_result = await cq.recall(
+            user_id=user.id,
+            text=body.user_content,
+            metadata=cq_metadata or None,
+        )
+        if cq_result.get("matched_entities"):
+            cq_gated = True
 
     # 6. Route to provider
     start = time.monotonic()
@@ -297,8 +397,8 @@ async def chat(
     # 9. Log usage
     await usage_tracker.log_usage(db, user.id, body, response, elapsed_ms)
 
-    # 9.5. Context Quilt capture (async, non-blocking)
-    if body.context_quilt:
+    # 9.5. Context Quilt capture (async, non-blocking) — only for enabled, not teaser
+    if cq_state == "enabled" and body.context_quilt:
         asyncio.create_task(cq.capture(
             user_id=user.id,
             interaction_type=body.call_type or "query",
@@ -324,10 +424,17 @@ async def chat(
         json_response.headers["X-Monthly-Limit"] = f"{tier.monthly_cost_limit_usd:.2f}"
         json_response.headers["X-Overage-Balance"] = f"{overage_balance:.4f}"
 
-    # CQ response headers (for ShoulderSurf UI indicator)
-    if body.context_quilt:
-        matched = cq_result.get("matched_entities", [])
+    # Feature response headers — generic pattern for any gated feature
+    matched = cq_result.get("matched_entities", [])
+    if cq_state == "enabled" and body.context_quilt:
+        # Full CQ: report what was used
         json_response.headers["X-CQ-Matched"] = str(len(matched))
+        if matched:
+            json_response.headers["X-CQ-Entities"] = ",".join(matched[:10])
+    elif cq_gated:
+        # Teaser: report what was found but not used
+        json_response.headers["X-CQ-Matched"] = str(len(matched))
+        json_response.headers["X-CQ-Gated"] = "true"
         if matched:
             json_response.headers["X-CQ-Entities"] = ",".join(matched[:10])
 

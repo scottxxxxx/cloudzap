@@ -42,6 +42,7 @@ class Settings(BaseSettings):
 
     # Config file paths
     tier_config_path: str = "config/tiers.yml"
+    feature_config_path: str = "config/features.yml"
     provider_config_path: str = "config/providers.yml"
 
     model_config = {"env_prefix": "CZ_", "env_file": ".env", "extra": "ignore"}

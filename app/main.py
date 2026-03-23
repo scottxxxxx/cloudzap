@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.database import init_db
 from app.middleware.request_logging import RequestLoggingMiddleware
+from app.models.feature import load_feature_config
 from app.models.tier import load_tier_config
 from app.routers import auth, chat, health, webhooks
 from app.services.apple_auth import AppleAuthVerifier
@@ -34,6 +35,7 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     app.state.start_time = time.monotonic()
     app.state.tier_config = load_tier_config(settings.tier_config_path)
+    app.state.feature_config = load_feature_config(settings.feature_config_path)
     app.state.apple_verifier = AppleAuthVerifier(settings.apple_bundle_id)
     app.state.jwt_service = JWTService(
         secret=settings.jwt_secret,
