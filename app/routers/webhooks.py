@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import aiosqlite
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 
@@ -156,6 +157,168 @@ async def simulate_tier(
         "real_tier": real_tier,
         "simulated_tier": body.tier,
         "exhausted": body.exhausted,
+    }
+
+
+# --- Provider Status & Key Management ---
+
+# Providers we can check balance/status for
+_PROVIDER_CHECKS = {
+    "anthropic": {
+        "display_name": "Anthropic",
+        "env_key": "anthropic_api_key",
+        "check_url": "https://api.anthropic.com/v1/messages",
+        "has_balance_api": False,
+        "console_url": "https://console.anthropic.com/settings/billing",
+    },
+    "openrouter": {
+        "display_name": "OpenRouter",
+        "env_key": "openrouter_api_key",
+        "check_url": "https://openrouter.ai/api/v1/auth/key",
+        "has_balance_api": True,
+        "console_url": "https://openrouter.ai/credits",
+    },
+    "openai": {
+        "display_name": "OpenAI",
+        "env_key": "openai_api_key",
+        "check_url": None,
+        "has_balance_api": False,
+        "console_url": "https://platform.openai.com/settings/organization/billing/overview",
+    },
+}
+
+
+@router.get("/admin/provider-status")
+async def provider_status(
+    request: Request,
+    x_admin_key: str = Header(...),
+):
+    """Check API key status and balance for configured providers."""
+    _verify_admin(request, x_admin_key)
+    settings = request.app.state.settings
+
+    results = {}
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        for name, info in _PROVIDER_CHECKS.items():
+            key = getattr(settings, info["env_key"], "")
+            masked = f"...{key[-4:]}" if key and len(key) > 4 else "(not set)"
+
+            entry = {
+                "display_name": info["display_name"],
+                "key_set": bool(key),
+                "key_masked": masked,
+                "console_url": info["console_url"],
+                "status": "unknown",
+            }
+
+            if not key:
+                entry["status"] = "no_key"
+                results[name] = entry
+                continue
+
+            try:
+                if name == "openrouter":
+                    # OpenRouter has a balance API
+                    resp = await client.get(
+                        "https://openrouter.ai/api/v1/auth/key",
+                        headers={"Authorization": f"Bearer {key}"},
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json().get("data", {})
+                        entry["status"] = "ok"
+                        entry["balance"] = {
+                            "label": data.get("label", ""),
+                            "usage_usd": data.get("usage", 0),
+                            "limit_usd": data.get("limit", None),
+                            "remaining_usd": (
+                                round(data["limit"] - data["usage"], 4)
+                                if data.get("limit") is not None
+                                else None
+                            ),
+                            "is_free_tier": data.get("is_free_tier", False),
+                        }
+                    else:
+                        entry["status"] = "invalid_key"
+
+                elif name == "anthropic":
+                    # Anthropic has no balance API — verify key with a minimal call
+                    resp = await client.post(
+                        "https://api.anthropic.com/v1/messages",
+                        headers={
+                            "x-api-key": key,
+                            "anthropic-version": "2023-06-01",
+                            "content-type": "application/json",
+                        },
+                        json={
+                            "model": "claude-haiku-4-5-20251001",
+                            "max_tokens": 1,
+                            "messages": [{"role": "user", "content": "hi"}],
+                        },
+                    )
+                    if resp.status_code == 200:
+                        entry["status"] = "ok"
+                    elif resp.status_code == 401:
+                        entry["status"] = "invalid_key"
+                    elif resp.status_code == 429:
+                        entry["status"] = "rate_limited"
+                    else:
+                        entry["status"] = "ok"  # 400 etc still means key works
+
+                else:
+                    # Generic: just mark as configured
+                    entry["status"] = "configured"
+
+            except httpx.TimeoutException:
+                entry["status"] = "timeout"
+            except Exception as e:
+                entry["status"] = "error"
+                entry["error"] = str(e)
+
+            results[name] = entry
+
+    return {"providers": results}
+
+
+class UpdateKeyRequest(BaseModel):
+    provider: str   # e.g., "anthropic", "openrouter"
+    api_key: str    # new key value
+
+
+@router.post("/admin/update-key")
+async def update_key(
+    body: UpdateKeyRequest,
+    request: Request,
+    x_admin_key: str = Header(...),
+):
+    """Update a provider API key at runtime (in-memory, takes effect immediately).
+
+    Does NOT persist to .env file — will revert on container restart.
+    To persist, also update the .env.prod file on the server.
+    """
+    _verify_admin(request, x_admin_key)
+    settings = request.app.state.settings
+
+    if body.provider not in _PROVIDER_CHECKS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown provider: {body.provider}. Available: {list(_PROVIDER_CHECKS.keys())}",
+        )
+
+    env_key = _PROVIDER_CHECKS[body.provider]["env_key"]
+
+    if not hasattr(settings, env_key):
+        raise HTTPException(status_code=400, detail=f"No setting for {env_key}")
+
+    # Update in-memory (pydantic-settings model is frozen, so use object.__setattr__)
+    object.__setattr__(settings, env_key, body.api_key)
+
+    masked = f"...{body.api_key[-4:]}" if len(body.api_key) > 4 else "***"
+    return {
+        "status": "ok",
+        "provider": body.provider,
+        "key_masked": masked,
+        "note": "Key updated in memory. Will revert on container restart unless .env.prod is also updated.",
     }
 
 

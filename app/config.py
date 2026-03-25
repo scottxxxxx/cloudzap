@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     kimi_api_key: str = ""
     qwen_api_key: str = ""
+    openrouter_api_key: str = ""  # Used by Context Quilt worker
 
     # Admin
     admin_key: str = ""

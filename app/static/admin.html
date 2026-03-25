@@ -173,6 +173,7 @@
     <div class="tab" onclick="switchTab('users')">Users</div>
     <div class="tab" onclick="switchTab('tiers')">Tiers</div>
     <div class="tab" onclick="switchTab('latency')">Latency</div>
+    <div class="tab" onclick="switchTab('providers')">Providers</div>
   </div>
 
   <!-- Overview -->
@@ -249,6 +250,15 @@
     <h3>Response Time Percentiles</h3>
     <div class="card" style="max-width:500px;" id="latency-card"></div>
   </div>
+
+  <!-- Providers -->
+  <div id="tab-providers" class="section">
+    <h3>API Provider Status</h3>
+    <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px;">
+      Check credit balances and update API keys. Key changes take effect immediately but revert on container restart.
+    </p>
+    <div id="provider-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;"></div>
+  </div>
 </div>
 
 <script>
@@ -279,6 +289,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', t.textContent.toLowerCase().includes(name.slice(0,4))));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'providers') loadProviders();
 }
 
 function fmt(n) { return n == null ? '-' : n.toLocaleString(); }
@@ -556,6 +567,79 @@ function updateSimBanner() {
       `Simulating ${simulationState.tier} tier (${mode}). Real tier: ${currentUserTier}. iOS app will see ${simulationState.tier} constraints.`;
   } else {
     banner.style.display = 'none';
+  }
+}
+
+// --- Providers tab ---
+async function loadProviders() {
+  const resp = await fetch(`${BASE}/webhooks/admin/provider-status`, {headers:{'X-Admin-Key':adminKey}});
+  if (!resp.ok) return;
+  const data = await resp.json();
+  const container = document.getElementById('provider-cards');
+
+  container.innerHTML = Object.entries(data.providers).map(([name, p]) => {
+    const statusColors = {ok:'var(--green)', configured:'var(--green)', no_key:'var(--text-dim)', invalid_key:'var(--red)', timeout:'var(--orange)', error:'var(--red)', rate_limited:'var(--orange)', unknown:'var(--text-dim)'};
+    const statusLabels = {ok:'Active', configured:'Configured', no_key:'No Key Set', invalid_key:'Invalid Key', timeout:'Timeout', error:'Error', rate_limited:'Rate Limited', unknown:'Unknown'};
+    const color = statusColors[p.status] || 'var(--text-dim)';
+    const label = statusLabels[p.status] || p.status;
+
+    let balanceHtml = '';
+    if (p.balance) {
+      const b = p.balance;
+      const remaining = b.remaining_usd != null ? `$${b.remaining_usd.toFixed(2)}` : 'No limit';
+      const used = `$${(b.usage_usd||0).toFixed(2)}`;
+      const limit = b.limit_usd != null ? `$${b.limit_usd.toFixed(2)}` : 'Unlimited';
+      const pct = b.limit_usd ? Math.min(100, (b.usage_usd / b.limit_usd) * 100) : 0;
+      const barColor = pct > 80 ? 'var(--red)' : pct > 50 ? 'var(--orange)' : 'var(--green)';
+      balanceHtml = `
+        <div style="margin:12px 0;padding:12px;background:var(--bg);border-radius:6px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px">
+            <span>Used: ${used}</span><span>Limit: ${limit}</span>
+          </div>
+          <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:6px">
+            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px"></div>
+          </div>
+          <div style="font-size:15px;font-weight:600;color:${barColor}">Remaining: ${remaining}</div>
+          ${b.label ? `<div style="font-size:11px;color:var(--text-dim);margin-top:4px">Key: ${b.label}</div>` : ''}
+        </div>`;
+    } else if (p.status === 'ok' || p.status === 'configured') {
+      balanceHtml = `<div style="margin:12px 0;font-size:12px;color:var(--text-dim)">
+        Balance not available via API. <a href="${p.console_url}" target="_blank" style="color:var(--accent)">Check console</a>
+      </div>`;
+    }
+
+    return `<div class="tier-card">
+      <h4 style="display:flex;justify-content:space-between;align-items:center">
+        <span>${p.display_name}</span>
+        <span style="font-size:12px;color:${color};font-weight:600">${label}</span>
+      </h4>
+      <div style="font-size:12px;color:var(--text-dim);font-family:monospace;margin-bottom:4px">Key: ${p.key_masked}</div>
+      ${balanceHtml}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="simulate-btn" onclick="promptUpdateKey('${name}','${p.display_name}')">Update Key</button>
+        <a href="${p.console_url}" target="_blank" class="simulate-btn" style="text-decoration:none;text-align:center">Console</a>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function promptUpdateKey(provider, displayName) {
+  const newKey = prompt(`Enter new API key for ${displayName}:\n\n(Takes effect immediately, reverts on restart)`);
+  if (!newKey) return;
+
+  const resp = await fetch(`${BASE}/webhooks/admin/update-key`, {
+    method: 'POST',
+    headers: {'X-Admin-Key': adminKey, 'Content-Type': 'application/json'},
+    body: JSON.stringify({provider, api_key: newKey}),
+  });
+
+  if (resp.ok) {
+    const data = await resp.json();
+    alert(`Key updated for ${displayName} (${data.key_masked})\n\nNote: ${data.note}`);
+    loadProviders();
+  } else {
+    const err = await resp.json();
+    alert('Failed: ' + (err.detail || 'Unknown error'));
   }
 }
 </script>
