@@ -639,7 +639,7 @@ class TranscriptCaptureRequest(BaseModel):
     project_id: str | None = None
 
 
-@router.post("/v1/capture-transcript")
+@router.post("/capture-transcript")
 async def capture_transcript(
     body: TranscriptCaptureRequest,
     user: UserRecord = Depends(get_current_user),
