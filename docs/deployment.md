@@ -1,0 +1,31 @@
+# Deployment
+
+> **Last updated:** March 25, 2026
+
+## Infrastructure
+
+- **GCP VM**: `35.239.227.192` (weirtech-shared-infra, e2-medium, ~$25/mo)
+- **Container**: `cloudzap` on `proxy-tier` Docker network
+- **Routing**: Nginx Proxy Manager routes `cz.shouldersurf.com` → `cloudzap:8000`
+- **CI/CD**: Push to `main` → GitHub Actions builds image → pushes to GHCR → SSH deploys
+- **Data**: SQLite DB persisted in `cloudzap-data` Docker volume at `/app/data/`
+- **Server config**: `/opt/cloudzap/.env.prod` + `/opt/cloudzap/docker-compose.prod.yml`
+
+## Manual deploy
+
+```bash
+ssh into GCP VM
+docker login ghcr.io
+docker compose pull && up -d --force-recreate
+```
+
+## Admin Dashboard
+
+Web UI at `/admin` with tabs:
+- **Overview**: Today's stats, period summary, user counts by tier
+- **Models**: Usage by provider/model (requests, tokens, cost, latency)
+- **Users**: All users with tier badges, lifetime stats
+- **Tiers**: Tier config cards with simulate button (switch your account to test any tier)
+- **Latency**: Response time percentiles (p50/p75/p90/p95/p99)
+
+Admin key: stored in `CZ_ADMIN_KEY` env var, persisted in browser localStorage.

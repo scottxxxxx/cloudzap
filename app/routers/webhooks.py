@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import aiosqlite
 import httpx
+import yaml
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 
@@ -25,6 +27,12 @@ class SimulateTierRequest(BaseModel):
     user_id: str
     tier: str | None = None  # null to clear simulation
     exhausted: bool = True
+
+
+class UpdateFeatureStateRequest(BaseModel):
+    tier: str
+    feature: str
+    state: str  # "enabled", "teaser", "disabled"
 
 
 @router.post("/admin/set-tier")
@@ -157,6 +165,56 @@ async def simulate_tier(
         "real_tier": real_tier,
         "simulated_tier": body.tier,
         "exhausted": body.exhausted,
+    }
+
+
+@router.post("/admin/update-feature-state")
+async def update_feature_state(
+    body: UpdateFeatureStateRequest,
+    request: Request,
+    x_admin_key: str = Header(...),
+):
+    """Toggle a feature's state for a specific tier. Writes to tiers.yml and reloads."""
+    _verify_admin(request, x_admin_key)
+
+    if body.state not in ("enabled", "teaser", "disabled"):
+        raise HTTPException(status_code=400, detail=f"Invalid state: {body.state}. Must be enabled, teaser, or disabled")
+
+    tier_config = request.app.state.tier_config
+    if body.tier not in tier_config.tiers:
+        raise HTTPException(status_code=400, detail=f"Unknown tier: {body.tier}")
+
+    # Load current YAML
+    tiers_path = Path(__file__).parent.parent.parent / "config" / "tiers.yml"
+
+    with open(tiers_path) as f:
+        raw = yaml.safe_load(f)
+
+    # Update the feature state
+    tier_data = raw["tiers"].get(body.tier)
+    if not tier_data:
+        raise HTTPException(status_code=400, detail=f"Tier {body.tier} not found in tiers.yml")
+
+    if "features" not in tier_data:
+        tier_data["features"] = {}
+
+    old_state = tier_data["features"].get(body.feature, "disabled")
+    tier_data["features"][body.feature] = body.state
+
+    # Write back
+    with open(tiers_path, "w") as f:
+        yaml.dump(raw, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+    # Reload tier config in app state
+    from app.models.tier import load_tier_config
+    request.app.state.tier_config = load_tier_config(str(tiers_path))
+
+    return {
+        "status": "ok",
+        "tier": body.tier,
+        "feature": body.feature,
+        "old_state": old_state,
+        "new_state": body.state,
     }
 
 
@@ -507,6 +565,82 @@ async def dashboard(
             idx = int(len(latencies) * p / 100)
             percentiles[f"p{p}"] = latencies[min(idx, len(latencies) - 1)]
 
+    # Allocation alerts: users above 80%
+    cursor = await db.execute(
+        """SELECT u.id, u.email, u.tier, u.monthly_used_usd, u.monthly_cost_limit_usd
+           FROM users u
+           WHERE u.is_active = 1
+             AND u.monthly_cost_limit_usd > 0
+             AND u.monthly_used_usd >= u.monthly_cost_limit_usd * 0.8
+           ORDER BY (u.monthly_used_usd / u.monthly_cost_limit_usd) DESC"""
+    )
+    allocation_alerts = [
+        {
+            "user_id": r["id"],
+            "email": r["email"],
+            "tier": r["tier"],
+            "monthly_used_usd": round(float(r["monthly_used_usd"] or 0), 4),
+            "monthly_limit_usd": round(float(r["monthly_cost_limit_usd"] or 0), 4),
+            "percent_used": round(float(r["monthly_used_usd"] or 0) / float(r["monthly_cost_limit_usd"]) * 100, 1) if r["monthly_cost_limit_usd"] else 0,
+        }
+        for r in await cursor.fetchall()
+    ]
+
+    # Trial stats
+    cursor = await db.execute(
+        "SELECT COUNT(*) FROM users WHERE is_trial = 1"
+    )
+    active_trials = (await cursor.fetchone())[0]
+
+    cursor = await db.execute(
+        "SELECT COUNT(*) FROM users WHERE is_trial = 0 AND tier != 'free' AND tier != 'admin'"
+    )
+    converted = (await cursor.fetchone())[0]
+
+    cursor = await db.execute(
+        """SELECT id, email, tier, trial_end FROM users
+           WHERE is_trial = 1
+           ORDER BY trial_end ASC"""
+    )
+    trial_users = [
+        {"user_id": r["id"], "email": r["email"], "tier": r["tier"], "trial_end": r["trial_end"]}
+        for r in await cursor.fetchall()
+    ]
+
+    # Cached token savings
+    cursor = await db.execute(
+        """SELECT
+            COALESCE(SUM(cached_tokens), 0) as total_cached,
+            COALESCE(SUM(input_tokens), 0) as total_input,
+            COALESCE(SUM(output_tokens), 0) as total_output
+           FROM usage_log
+           WHERE request_timestamp >= date('now', ?) AND status = 'success'""",
+        (f"-{days} days",),
+    )
+    cache_row = await cursor.fetchone()
+    total_cached = cache_row["total_cached"]
+    # Estimate savings: cached tokens would have been billed as input tokens
+    # Use approximate Haiku input rate ($0.80/1M) as baseline
+    estimated_savings = total_cached * 0.80 / 1_000_000
+
+    # Daily usage trend
+    cursor = await db.execute(
+        """SELECT
+            date(request_timestamp) as day,
+            COUNT(*) as requests,
+            COALESCE(SUM(estimated_cost_usd), 0) as cost,
+            SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as errors
+           FROM usage_log
+           WHERE request_timestamp >= date('now', ?)
+           GROUP BY date(request_timestamp)
+           ORDER BY day""",
+        (f"-{days} days",),
+    )
+    daily_usage = [
+        {"day": r["day"], "requests": r["requests"], "cost": round(r["cost"], 4), "errors": r["errors"]}
+        for r in await cursor.fetchall()
+    ]
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "users": {
@@ -519,6 +653,88 @@ async def dashboard(
         "by_model": by_model,
         "top_users": top_users,
         "latency_percentiles": percentiles,
+        "allocation_alerts": allocation_alerts,
+        "trials": {
+            "active_trials": active_trials,
+            "converted_subscribers": converted,
+            "trial_users": trial_users,
+        },
+        "cache_savings": {
+            "cached_tokens": total_cached,
+            "estimated_savings_usd": round(estimated_savings, 4),
+        },
+        "daily_usage": daily_usage,
+    }
+
+
+@router.get("/admin/errors")
+async def error_log(
+    request: Request,
+    db: aiosqlite.Connection = Depends(get_db),
+    x_admin_key: str = Header(...),
+    days: int = Query(default=7, ge=1, le=90),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Recent failed requests for debugging."""
+    _verify_admin(request, x_admin_key)
+
+    cursor = await db.execute(
+        """SELECT l.id, l.user_id, u.email, l.provider, l.model,
+            l.status, l.error_message, l.response_time_ms,
+            l.request_timestamp, l.call_type, l.prompt_mode
+           FROM usage_log l
+           LEFT JOIN users u ON l.user_id = u.id
+           WHERE l.status != 'success'
+             AND l.request_timestamp >= date('now', ?)
+           ORDER BY l.request_timestamp DESC
+           LIMIT ?""",
+        (f"-{days} days", limit),
+    )
+    errors = [
+        {
+            "id": r["id"],
+            "user_email": r["email"],
+            "provider": r["provider"],
+            "model": r["model"],
+            "status": r["status"],
+            "error_message": r["error_message"],
+            "response_time_ms": r["response_time_ms"],
+            "timestamp": r["request_timestamp"],
+            "call_type": r["call_type"],
+            "prompt_mode": r["prompt_mode"],
+        }
+        for r in await cursor.fetchall()
+    ]
+
+    # Error summary by type
+    cursor = await db.execute(
+        """SELECT status, COUNT(*) as count
+           FROM usage_log
+           WHERE status != 'success'
+             AND request_timestamp >= date('now', ?)
+           GROUP BY status
+           ORDER BY count DESC""",
+        (f"-{days} days",),
+    )
+    by_status = {r["status"]: r["count"] for r in await cursor.fetchall()}
+
+    # Error summary by provider
+    cursor = await db.execute(
+        """SELECT provider, COUNT(*) as count
+           FROM usage_log
+           WHERE status != 'success'
+             AND request_timestamp >= date('now', ?)
+           GROUP BY provider
+           ORDER BY count DESC""",
+        (f"-{days} days",),
+    )
+    by_provider = {r["provider"]: r["count"] for r in await cursor.fetchall()}
+
+    return {
+        "errors": errors,
+        "total": len(errors),
+        "by_status": by_status,
+        "by_provider": by_provider,
     }
 
 
@@ -544,6 +760,7 @@ async def get_tiers(
             "allowed_models": tier.allowed_models,
             "max_images_per_request": tier.max_images_per_request,
             "storekit_product_id": tier.storekit_product_id,
+            "features": tier.features,
         }
 
     return {"tiers": tiers}
