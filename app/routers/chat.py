@@ -339,6 +339,7 @@ async def usage_me(
     hours_used = monthly_used / model_cost_per_hour if model_cost_per_hour > 0 else 0
     hours_limit = monthly_limit / model_cost_per_hour if monthly_limit > 0 else -1
     result = {
+        "user_id": user.id,
         "tier": effective_tier_name,
         "tier_display_name": tier.display_name if tier else effective_tier_name,
         "allocation": {
@@ -570,7 +571,9 @@ async def chat(
     await usage_tracker.log_usage(db, user.id, body, response, elapsed_ms)
 
     # 9.5. Context Quilt capture (async, non-blocking) — only for enabled, not teaser
-    if cq_state == "enabled" and body.context_quilt:
+    # Skip capture for post-meeting chat — user is consuming the quilt, not adding to it.
+    # The quilt was already built from the live meeting transcript at session end.
+    if cq_state == "enabled" and body.context_quilt and body.prompt_mode != "PostMeetingChat":
         asyncio.create_task(cq.capture(
             user_id=user.id,
             interaction_type=body.call_type or "query",

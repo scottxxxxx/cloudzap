@@ -85,6 +85,8 @@
   .badge.admin { background: rgba(188,140,255,0.15); color: var(--purple); }
   .badge.subscriber { background: rgba(63,185,80,0.15); color: var(--green); }
   .badge.free { background: rgba(139,148,158,0.15); color: var(--text-dim); }
+  .badge.error { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge.rate_limited { background: rgba(210,153,34,0.15); color: var(--orange); }
 
   /* Tabs */
   .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
@@ -174,6 +176,7 @@
     <div class="tab" onclick="switchTab('tiers')">Tiers</div>
     <div class="tab" onclick="switchTab('latency')">Latency</div>
     <div class="tab" onclick="switchTab('providers')">Providers</div>
+    <div class="tab" onclick="switchTab('errors')">Errors</div>
   </div>
 
   <!-- Overview -->
@@ -184,6 +187,21 @@
     <div class="cards" id="period-cards"></div>
     <h3>Users</h3>
     <div class="cards" id="user-cards"></div>
+
+    <h3>Allocation Alerts</h3>
+    <div class="table-wrap" id="alloc-alerts-wrap" style="display:none"><table id="alloc-alerts-table"><thead><tr>
+      <th>User</th><th>Tier</th><th>Used</th><th>Limit</th><th>%</th>
+    </tr></thead><tbody></tbody></table></div>
+    <div id="alloc-alerts-none" class="card" style="max-width:400px;text-align:center;color:var(--text-dim)">No users above 80% allocation</div>
+
+    <h3>Trial Funnel</h3>
+    <div class="cards" id="trial-cards"></div>
+
+    <h3>Cache Savings</h3>
+    <div class="cards" id="cache-cards"></div>
+
+    <h3 id="trend-label">Daily Trend</h3>
+    <div class="card" id="daily-trend-chart" style="padding:16px;overflow-x:auto"></div>
   </div>
 
   <!-- Models -->
@@ -259,6 +277,16 @@
     </p>
     <div id="provider-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;"></div>
   </div>
+
+  <!-- Errors -->
+  <div id="tab-errors" class="section">
+    <h3>Error Summary</h3>
+    <div class="cards" id="error-summary-cards"></div>
+    <h3>Recent Errors</h3>
+    <div class="table-wrap"><table id="error-table"><thead><tr>
+      <th>Time</th><th>User</th><th>Provider</th><th>Model</th><th>Status</th><th>Error</th><th>Latency</th><th>Type</th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
 </div>
 
 <script>
@@ -290,6 +318,7 @@ function switchTab(name) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'providers') loadProviders();
+  if (name === 'errors') loadErrors();
 }
 
 function fmt(n) { return n == null ? '-' : n.toLocaleString(); }
@@ -319,6 +348,8 @@ async function refresh() {
     fetch(`${BASE}/webhooks/admin/users`, {headers:{'X-Admin-Key':adminKey}}).then(r=>r.json()),
     fetch(`${BASE}/webhooks/admin/tiers`, {headers:{'X-Admin-Key':adminKey}}).then(r=>r.json()),
   ]);
+
+  const tierNames = Object.keys(tiers.tiers);
 
   // Track current user for simulate
   if (users.users.length > 0) {
@@ -391,7 +422,12 @@ async function refresh() {
     <td>${allocBar}</td>
     <td>${resets}</td>
     <td>${fmtCost(u.total_cost_usd)}</td><td>${timeAgo(u.last_request)}</td>
-    <td><button class="refresh-btn" onclick="showUserDetail('${u.id}','${u.email||"User"}')">Detail</button></td>
+    <td style="display:flex;gap:4px;align-items:center">
+      <select class="period-select" style="font-size:11px;padding:3px 6px" onchange="changeTier('${u.id}',this.value,'${u.tier}')" ${u.tier === 'admin' ? 'disabled' : ''}>
+        ${tierNames.map(t => `<option value="${t}" ${t === u.tier ? 'selected' : ''}>${t}</option>`).join('')}
+      </select>
+      <button class="refresh-btn" onclick="showUserDetail('${u.id}','${u.email||"User"}')">Detail</button>
+    </td>
   </tr>`;
   }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-dim)">No users yet</td></tr>';
 
@@ -403,6 +439,65 @@ async function refresh() {
       `<div class="latency-bar"><div class="label">${k}</div><div class="bar" style="width:${v/maxP*280}px"></div><div class="val">${fmtMs(v)}</div></div>`
     ).join('')
     : '<div style="padding:20px;color:var(--text-dim);text-align:center">No latency data yet</div>';
+
+  // Allocation alerts
+  const alerts = dash.allocation_alerts || [];
+  if (alerts.length > 0) {
+    document.getElementById('alloc-alerts-wrap').style.display = '';
+    document.getElementById('alloc-alerts-none').style.display = 'none';
+    document.querySelector('#alloc-alerts-table tbody').innerHTML = alerts.map(a => `<tr>
+      <td>${a.email || 'Private relay'}</td>
+      <td><span class="badge ${a.tier}">${a.tier}</span></td>
+      <td>${fmtCost(a.monthly_used_usd)}</td>
+      <td>${fmtCost(a.monthly_limit_usd)}</td>
+      <td style="color:${a.percent_used >= 100 ? 'var(--red)' : 'var(--orange)'};font-weight:600">${a.percent_used}%</td>
+    </tr>`).join('');
+  } else {
+    document.getElementById('alloc-alerts-wrap').style.display = 'none';
+    document.getElementById('alloc-alerts-none').style.display = '';
+  }
+
+  // Trial funnel
+  const trials = dash.trials || {};
+  const trialConvRate = (trials.active_trials + trials.converted_subscribers) > 0
+    ? ((trials.converted_subscribers / (trials.active_trials + trials.converted_subscribers)) * 100).toFixed(0) + '%'
+    : 'N/A';
+  document.getElementById('trial-cards').innerHTML =
+    card('Active Trials', fmt(trials.active_trials || 0), 'accent') +
+    card('Converted', fmt(trials.converted_subscribers || 0), 'green') +
+    card('Conversion Rate', trialConvRate, 'purple');
+
+  // Cache savings
+  const cache = dash.cache_savings || {};
+  document.getElementById('cache-cards').innerHTML =
+    card('Cached Tokens', fmt(cache.cached_tokens || 0), 'purple') +
+    card('Est. Savings', fmtCost(cache.estimated_savings_usd || 0), 'green');
+
+  // Daily trend (simple CSS bar chart)
+  const daily = dash.daily_usage || [];
+  if (daily.length > 0) {
+    const maxCost = Math.max(...daily.map(d => d.cost), 0.001);
+    const maxReq = Math.max(...daily.map(d => d.requests), 1);
+    document.getElementById('daily-trend-chart').innerHTML =
+      '<div style="display:flex;align-items:flex-end;gap:2px;height:80px">' +
+      daily.map(d => {
+        const h = Math.max(4, (d.cost / maxCost) * 72);
+        const errH = d.errors > 0 ? Math.max(2, (d.errors / maxReq) * 72) : 0;
+        const dayLabel = d.day.slice(5); // MM-DD
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px" title="${d.day}: ${d.requests} reqs, ${fmtCost(d.cost)}, ${d.errors} errors">
+          ${errH > 0 ? `<div style="width:100%;max-width:24px;height:${errH}px;background:var(--red);border-radius:2px 2px 0 0;opacity:0.7"></div>` : ''}
+          <div style="width:100%;max-width:24px;height:${h}px;background:var(--accent);border-radius:2px 2px 0 0"></div>
+          <div style="font-size:9px;color:var(--text-dim);transform:rotate(-45deg);white-space:nowrap;margin-top:4px">${dayLabel}</div>
+        </div>`;
+      }).join('') +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);margin-top:12px">' +
+      '<span>Blue = cost, Red = errors</span>' +
+      '<span>Max: ' + fmtCost(maxCost) + '/day</span>' +
+      '</div>';
+  } else {
+    document.getElementById('daily-trend-chart').innerHTML = '<div style="text-align:center;color:var(--text-dim)">No usage data</div>';
+  }
 
   document.getElementById('dash-subtitle').textContent = `Updated ${new Date().toLocaleTimeString()}`;
 }
@@ -424,6 +519,22 @@ function renderTiers(tiers) {
     const modelTags = t.allowed_models.map(m =>
       `<span class="model-tag ${m === '*' ? 'wildcard' : ''}">${m === '*' ? 'All Models' : m}</span>`
     ).join('');
+
+    // Feature states
+    const featureEntries = Object.entries(t.features || {});
+    const featuresHtml = featureEntries.length ? featureEntries.map(([fname, fstate]) => {
+      const stateColors = {enabled: 'var(--green)', teaser: 'var(--orange)', disabled: 'var(--text-dim)'};
+      const stateColor = stateColors[fstate] || 'var(--text-dim)';
+      return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
+        <span style="font-size:12px;min-width:100px">${fname}</span>
+        <select class="period-select" style="font-size:11px;padding:2px 6px;color:${stateColor}"
+          onchange="toggleFeature('${name}','${fname}',this.value)">
+          <option value="enabled" ${fstate==='enabled'?'selected':''}>enabled</option>
+          <option value="teaser" ${fstate==='teaser'?'selected':''}>teaser</option>
+          <option value="disabled" ${fstate==='disabled'?'selected':''}>disabled</option>
+        </select>
+      </div>`;
+    }).join('') : '<div style="font-size:12px;color:var(--text-dim)">No features configured</div>';
 
     let borderColor = 'var(--border)';
     if (isSimulatedTier) borderColor = 'var(--orange)';
@@ -461,6 +572,10 @@ function renderTiers(tiers) {
       <div class="model-list" style="margin-top:8px">
         <div class="lbl" style="margin-bottom:4px">Models</div>
         ${modelTags}
+      </div>
+      <div style="margin-top:10px">
+        <div class="lbl" style="margin-bottom:4px">Features</div>
+        ${featuresHtml}
       </div>
       <div style="margin-top:10px;display:flex;gap:4px;flex-wrap:wrap">
         ${simButtons}
@@ -641,6 +756,70 @@ async function promptUpdateKey(provider, displayName) {
   } else {
     const err = await resp.json();
     alert('Failed: ' + (err.detail || 'Unknown error'));
+  }
+}
+
+async function loadErrors() {
+  const days = document.getElementById('period').value;
+  const resp = await fetch(`${BASE}/webhooks/admin/errors?days=${days}`, {headers:{'X-Admin-Key':adminKey}});
+  if (!resp.ok) return;
+  const data = await resp.json();
+
+  // Summary cards
+  const summaryEl = document.getElementById('error-summary-cards');
+  const totalErrors = Object.values(data.by_status).reduce((a,b) => a+b, 0);
+  summaryEl.innerHTML =
+    card('Total Errors', fmt(totalErrors), totalErrors > 0 ? 'red' : 'green') +
+    Object.entries(data.by_status).map(([s,c]) => card(s, fmt(c), s === 'error' ? 'red' : 'orange')).join('') +
+    Object.entries(data.by_provider).map(([p,c]) => card(p + ' errors', fmt(c), 'red')).join('');
+
+  // Error table
+  document.querySelector('#error-table tbody').innerHTML = data.errors.map(e => `<tr>
+    <td style="white-space:nowrap">${timeAgo(e.timestamp)}</td>
+    <td>${e.user_email || '<span style="color:var(--text-dim)">Unknown</span>'}</td>
+    <td>${e.provider}</td>
+    <td class="mono" style="font-size:11px">${e.model}</td>
+    <td><span class="badge ${e.status}">${e.status}</span></td>
+    <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(e.error_message||'').replace(/"/g,'&quot;')}">${e.error_message || '-'}</td>
+    <td>${fmtMs(e.response_time_ms)}</td>
+    <td>${e.call_type || '-'}</td>
+  </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-dim)">No errors</td></tr>';
+}
+
+async function changeTier(userId, newTier, oldTier) {
+  if (newTier === oldTier) return;
+  const ok = confirm(`Change tier from "${oldTier}" to "${newTier}"?`);
+  if (!ok) { refresh(); return; }
+
+  const resp = await fetch(`${BASE}/webhooks/admin/set-tier`, {
+    method: 'POST',
+    headers: {'X-Admin-Key': adminKey, 'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: userId, tier: newTier}),
+  });
+
+  if (resp.ok) {
+    refresh();
+  } else {
+    const err = await resp.json();
+    alert('Failed: ' + (err.detail || 'Unknown error'));
+    refresh();
+  }
+}
+
+async function toggleFeature(tierName, featureName, newState) {
+  const resp = await fetch(`${BASE}/webhooks/admin/update-feature-state`, {
+    method: 'POST',
+    headers: {'X-Admin-Key': adminKey, 'Content-Type': 'application/json'},
+    body: JSON.stringify({tier: tierName, feature: featureName, state: newState}),
+  });
+
+  if (resp.ok) {
+    const data = await resp.json();
+    refresh();
+  } else {
+    const err = await resp.json();
+    alert('Failed: ' + (err.detail || 'Unknown error'));
+    refresh();
   }
 }
 </script>
