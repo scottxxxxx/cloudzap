@@ -11,8 +11,16 @@
 **Admin dashboard:** `https://cz.shouldersurf.com/admin`
 **GitHub:** `https://github.com/scottxxxxx/cloudzap`
 **Subscription spec:** `/Users/scottguida/ShoulderSurf/Subscription_Tiers.md` — full tier details, pricing, allocation, carryover, StoreKit config
-**Subscription system doc:** `docs/subscription-system.md` — full-stack guide to how ShoulderSurf + StoreKit + GhostPour handle subscriptions, allocation, and enforcement
 **Planning docs:** `shouldersurf-proxy-claude-code-plan.docx`, `Server side proxy-claude-code-plan.docx` (in repo root, gitignored)
+
+### Deep-dive docs
+
+| Doc | Covers |
+|-----|--------|
+| `docs/subscription-system.md` | Full-stack subscription lifecycle: StoreKit + GhostPour + allocation enforcement |
+| `docs/feature-gating.md` | 3-state feature gating, Context Quilt integration, adding new features |
+| `docs/remote-config.md` | iOS remote config system (`GET /v1/config/{name}`) |
+| `docs/deployment.md` | GCP VM, Docker, CI/CD, admin dashboard |
 
 ## Tech Stack
 
@@ -31,14 +39,17 @@ app/
 ├── config.py            # pydantic-settings with CZ_ env prefix, feature_config_path
 ├── database.py          # aiosqlite init + schema + migrations
 ├── dependencies.py      # get_current_user (JWT verification)
-├── models/              # Pydantic request/response models
+├── models/
+│   ├── chat.py          # ChatRequest / ChatResponse Pydantic models
 │   ├── feature.py       # FeatureState enum, FeatureDefinition, FeatureConfig, load_feature_config()
+│   ├── tier.py          # TierDefinition with feature_state(), is_feature_enabled(), is_feature_teaser()
+│   └── user.py          # UserRecord model
 ├── routers/
 │   ├── auth.py          # POST /auth/apple, POST /auth/refresh
-│   ├── chat.py          # POST /v1/chat (with auto model routing), POST /v1/capture-transcript
+│   ├── chat.py          # /v1/chat, /v1/usage/me, /v1/tiers, /v1/verify-receipt, /v1/sync-subscription, /v1/capture-transcript
 │   ├── config.py        # GET /v1/config/{name} (remote config for iOS app)
 │   ├── health.py        # GET /health, GET /admin, GET /v1/model-pricing
-│   └── webhooks.py      # Admin endpoints (dashboard, users, tiers, set-tier)
+│   └── webhooks.py      # Admin endpoints (dashboard, users, user detail, tiers, set-tier, simulate-tier, provider-status, update-key)
 ├── services/
 │   ├── apple_auth.py    # Apple JWKS token verification
 │   ├── jwt_service.py   # JWT create/verify
@@ -52,13 +63,9 @@ app/
 └── static/admin.html    # Web-based admin dashboard
 config/
 ├── tiers.yml            # Subscription tier definitions (features dict, feature_bullets, descriptions)
-├── features.yml         # Feature definitions with display metadata (display_name, description, teaser_description, upgrade_cta, category, service_module)
+├── features.yml         # Feature definitions with display metadata
 ├── providers.yml        # Provider registry (URLs, auth, models)
-└── remote/              # iOS remote config JSON files (served via GET /v1/config/{name})
-    ├── idle-tips.json         # Orb idle tip messages
-    ├── protected-prompts.json # System prompts, summary prompts, default prompt modes
-    ├── llm-providers.json     # Provider endpoints and model lists (update without app release)
-    └── model-capabilities.json # Per-model context slots, token limits, CQ readiness
+└── remote/              # iOS remote config JSON files (see docs/remote-config.md)
 ```
 
 ## Build & Run
@@ -79,36 +86,20 @@ pytest tests/ -v
 
 ## Subscription Tiers
 
-See **`/Users/scottguida/ShoulderSurf/Subscription_Tiers.md`** for the full tier specification.
+See **`/Users/scottguida/ShoulderSurf/Subscription_Tiers.md`** for the full tier specification, and **`docs/subscription-system.md`** for the full-stack implementation guide.
 
 5 tiers + admin, configured in `config/tiers.yml`. Model assignment is server-controlled — client sends `model: "auto"`, gateway substitutes the tier's `default_model`.
 
 Summary: free ($0.05), standard ($2.99), pro ($4.99), ultra ($9.99), ultra_max ($19.99). Haiku for free/standard/pro, Sonnet for ultra/ultra_max. 2x markup on avg user cost. Monthly cost-based allocation with overage credits at same rate. Dollar-value carryover on upgrade.
 
-### tiers.yml structure
+### Allocation tracking
 
-Each tier definition includes:
-- `default_model`, `max_images`, `summary_interval_minutes`, `image_resolution` — model routing & settings locks
-- `features: dict` — per-feature state (`enabled`, `teaser`, or `disabled`). Replaces the old `context_quilt_enabled: bool`
-- `feature_bullets: list[str]` — marketing bullet points for subscription UI (renamed from the old `features:` display list)
-- `description: str` — human-readable tier description
-- `hours_per_month: int` — monthly hour allocation
-
-### TierDefinition model (`app/models/tier.py`)
-
-`TierDefinition` exposes helper methods:
-- `feature_state(name) -> FeatureState` — returns the feature's state for this tier (defaults to `disabled`)
-- `is_feature_enabled(name) -> bool` — shorthand for `feature_state(name) == enabled`
-- `is_feature_teaser(name) -> bool` — shorthand for `feature_state(name) == teaser`
-
-### Allocation tracking (TODO — next implementation phase)
-
-- `monthly_cost_limit_usd` per tier (derived from hours × model cost)
+- `monthly_cost_limit_usd` per tier (derived from hours x model cost)
 - `monthly_used_usd` tracked per user, resets on subscription renewal date
 - `overage_balance_usd` per user (purchased credit packs)
 - Usage priority: monthly allocation → overage balance → on-device fallback
 - `X-Allocation-Percent` and `X-Allocation-Warning` headers on every chat response
-- `GET /v1/usage/me` endpoint for authenticated users to check their allocation
+- `GET /v1/usage/me` returns `user_id`, allocation, hours, overage, usage stats, and per-tier feature states
 
 ### JWT design rule
 
@@ -157,27 +148,18 @@ Key variables:
 - `CZ_ADMIN_KEY` — Admin dashboard/API key
 - `CZ_PRICING_SOURCE_URL` — LiteLLM pricing JSON URL (default: GitHub raw)
 - `CZ_JWT_ACCESS_TOKEN_EXPIRE_MINUTES` — JWT lifetime (currently 1440 = 24h)
+- `CZ_CQ_BASE_URL` — Context Quilt endpoint (e.g., `https://cq.shouldersurf.com`)
 - `feature_config_path` — path to features.yml (default: `config/features.yml`, set in `app/config.py`)
-
-## Deployment
-
-- **GCP VM**: `35.239.227.192` (weirtech-shared-infra, e2-medium, ~$25/mo)
-- **Container**: `cloudzap` on `proxy-tier` Docker network
-- **Routing**: Nginx Proxy Manager routes `cz.shouldersurf.com` → `cloudzap:8000`
-- **CI/CD**: Push to `main` → GitHub Actions builds image → pushes to GHCR → SSH deploys
-- **Data**: SQLite DB persisted in `cloudzap-data` Docker volume at `/app/data/`
-- **Server config**: `/opt/cloudzap/.env.prod` + `/opt/cloudzap/docker-compose.prod.yml`
-- **Manual deploy**: SSH in, `docker login ghcr.io`, `docker compose pull && up -d --force-recreate`
 
 ## Database
 
-3 tables, raw SQL (no ORM), with migration support for schema changes:
-- **users**: `id`, `apple_sub`, `email`, `display_name`, `tier`, timestamps
-- **refresh_tokens**: `id`, `user_id`, `token_hash`, `expires_at`, `revoked`
-- **usage_log**: `id`, `user_id`, `provider`, `model`, token counts, `estimated_cost_usd`, latency, status, `metadata` (JSON)
+3 tables, raw SQL (no ORM), with versioned migrations in `app/database.py`:
 
-**Planned additions** (next implementation phase):
-- `monthly_used_usd`, `overage_balance_usd`, `allocation_resets_at` on users table
+**users**: `id`, `apple_sub`, `email`, `display_name`, `tier`, `monthly_cost_limit_usd`, `monthly_used_usd`, `overage_balance_usd`, `allocation_resets_at`, `simulated_tier`, `simulated_exhausted`, `is_trial`, `trial_start`, `trial_end`, `is_active`, `metadata`, timestamps
+
+**refresh_tokens**: `id`, `user_id`, `token_hash`, `expires_at`, `revoked`, `created_at`
+
+**usage_log**: `id`, `user_id`, `provider`, `model`, `input_tokens`, `output_tokens`, `cached_tokens`, `estimated_cost_usd`, `response_time_ms`, `status`, `error_message`, `call_type`, `prompt_mode`, `image_count`, `session_duration_sec`, `request_timestamp`, `metadata` (JSON)
 
 ## API Endpoints
 
@@ -187,16 +169,22 @@ Key variables:
 | GET | `/admin` | None (key in UI) | Admin dashboard web UI |
 | POST | `/auth/apple` | None | Apple Sign In → JWT |
 | POST | `/auth/refresh` | None | Refresh token rotation |
-| POST | `/v1/chat` | Bearer JWT | Proxied LLM request (auto model routing, generic feature gating) |
+| POST | `/v1/chat` | Bearer JWT | Proxied LLM request (auto model routing, feature gating) |
 | POST | `/v1/capture-transcript` | Bearer JWT | End-of-meeting transcript capture for Context Quilt |
-| GET | `/v1/config/{name}` | None | Remote config for iOS app (idle-tips, protected-prompts, llm-providers, model-capabilities) |
-| GET | `/v1/tiers` | None | Public tier catalog with features dict, feature_bullets, descriptions, and feature_definitions metadata (server-driven subscription UI) |
+| POST | `/v1/verify-receipt` | Bearer JWT | StoreKit receipt verification |
+| POST | `/v1/sync-subscription` | Bearer JWT | Subscription state sync from iOS |
+| GET | `/v1/usage/me` | Bearer JWT | User's allocation, overage, usage stats, features |
+| GET | `/v1/tiers` | None | Public tier catalog (server-driven subscription UI) |
+| GET | `/v1/config/{name}` | None | Remote config for iOS app (see `docs/remote-config.md`) |
 | GET | `/v1/model-pricing` | None | Cached LiteLLM pricing JSON |
 | GET | `/webhooks/admin/dashboard` | X-Admin-Key | Usage stats, latency, top users |
 | GET | `/webhooks/admin/users` | X-Admin-Key | User list with lifetime stats |
+| GET | `/webhooks/admin/user/{user_id}` | X-Admin-Key | Single user detail |
 | GET | `/webhooks/admin/tiers` | X-Admin-Key | Tier config viewer |
 | POST | `/webhooks/admin/set-tier` | X-Admin-Key | Manual tier assignment |
-| GET | `/v1/usage/me` | Bearer JWT | User's allocation, overage, usage stats, `features` dict (per-tier feature states) |
+| POST | `/webhooks/admin/simulate-tier` | X-Admin-Key | Tier simulation for testing |
+| GET | `/webhooks/admin/provider-status` | X-Admin-Key | Provider health check |
+| POST | `/webhooks/admin/update-key` | X-Admin-Key | Update provider API key |
 | GET | `/docs` | None | Swagger UI |
 
 **Planned endpoints:**
@@ -217,107 +205,6 @@ pytest tests/ -v
 ```
 
 41 tests covering: JWT, tier enforcement, provider routing, base64 redaction, rate limiting, generic adapter, pricing/cost calculation.
-
-## Admin Dashboard
-
-Web UI at `/admin` with tabs:
-- **Overview**: Today's stats, period summary, user counts by tier
-- **Models**: Usage by provider/model (requests, tokens, cost, latency)
-- **Users**: All users with tier badges, lifetime stats
-- **Tiers**: Tier config cards with simulate button (switch your account to test any tier)
-- **Latency**: Response time percentiles (p50/p75/p90/p95/p99)
-
-Admin key: stored in `CZ_ADMIN_KEY` env var, persisted in browser localStorage.
-
-## Generic Feature Gating
-
-Features have **three states per tier**, configured in `config/tiers.yml`:
-
-| State | Behavior |
-|-------|----------|
-| **enabled** | Run the feature check, apply results to the query, capture on response |
-| **teaser** | Run the feature check, return metadata headers to client, but **skip applying** results. Used for upgrade nudges. Returns `X-CQ-Gated: true` header |
-| **disabled** | Feature doesn't run at all |
-
-### How it works
-
-1. **`config/features.yml`** defines each feature's metadata (display_name, description, teaser_description, upgrade_cta, category, service_module). Loaded at startup into `app.state.feature_config`.
-2. **`config/tiers.yml`** sets per-tier state for each feature under the tier's `features:` dict (e.g., `context_quilt: "teaser"`).
-3. **`POST /v1/chat`** checks each feature's state for the user's tier:
-   - `enabled` → run check + apply results + capture on response
-   - `teaser` → run check + return metadata headers + skip injection
-   - `disabled` → skip entirely
-4. **Client opt-out**: `ChatRequest.skip_teasers: list[str] | None` — client can suppress specific teaser features (e.g., after the user dismisses an upgrade prompt).
-
-### Adding a new feature
-
-1. Add an entry in `config/features.yml` with display metadata
-2. Add per-tier state in `config/tiers.yml` under each tier's `features:` dict
-3. Implement `check()`, `apply()`, `on_response()` functions in `app/services/<service_module>.py`
-
-### Kill switch
-
-Change a feature from `teaser` → `disabled` in `tiers.yml` and restart. No code changes needed.
-
-## Context Quilt Integration
-
-GhostPour integrates with Context Quilt as the first feature using the generic feature gating system. CQ runs when `context_quilt: true` is in the ChatRequest **and** the user's tier has CQ in `enabled` or `teaser` state.
-
-**3-state behavior:**
-- **enabled**: recall → inject context into system_prompt → capture query+response after LLM responds
-- **teaser**: recall → return `X-CQ-Matched`/`X-CQ-Entities` headers + `X-CQ-Gated: true` → skip injection → skip capture
-- **disabled**: skip entirely
-
-**Recall (pre-route, synchronous):**
-- Calls `POST {CQ_BASE_URL}/v1/recall` with the user's query text
-- 200ms timeout — skips gracefully on timeout or error
-- Injects returned context into `system_prompt` (replaces `{{context_quilt}}` placeholder, or prepends)
-
-**Capture (post-response, async):**
-- Fires background `POST {CQ_BASE_URL}/v1/memory` with query, LLM response, and metadata
-- Never blocks the response to the user
-- Includes `meeting_id`, `project`, `call_type`, `prompt_mode` in metadata
-
-**Response headers (for ShoulderSurf UI indicator):**
-- `X-CQ-Matched`: number of entities matched (e.g., "3")
-- `X-CQ-Entities`: comma-separated entity names (e.g., "Bob Martinez,Widget 2.0")
-- `X-CQ-Gated`: `"true"` when CQ is in teaser mode (ran recall but didn't inject)
-
-**ChatRequest fields:**
-- `context_quilt: bool` — enable CQ for this request (default: false)
-- `meeting_id: str | None` — meeting UUID for CQ queue grouping
-- `project: str | None` — project name for CQ metadata
-- `skip_teasers: list[str] | None` — client-side opt-out for teaser features (e.g., `["context_quilt"]`)
-
-**Config:**
-- `CZ_CQ_BASE_URL` — CQ endpoint (e.g., `https://cq.shouldersurf.com`)
-- `CZ_CQ_APP_ID` — app identifier for CQ auth (default: `cloudzap`)
-- `CZ_CQ_RECALL_TIMEOUT_MS` — max wait for recall (default: 200)
-
-## Remote Config (iOS App)
-
-GhostPour serves JSON config files to the ShoulderSurf iOS app via `GET /v1/config/{name}`. This allows updating prompts, model lists, and capabilities without App Store releases.
-
-**How it works:**
-1. JSON files live in `config/remote/{slug}.json`, each with a top-level `"version"` integer
-2. All configs are loaded at startup into `app.state.remote_configs`
-3. iOS app calls `GET /v1/config/{slug}` on every launch
-4. If client sends `X-Config-Version: N` and server version matches, returns **304 Not Modified**
-5. Otherwise returns **200** with full JSON and `X-Config-Version` response header
-6. Unknown slugs return **404**
-
-**Available configs:**
-
-| Slug | File | Purpose |
-|------|------|---------|
-| `idle-tips` | `config/remote/idle-tips.json` | Orb idle tip messages |
-| `protected-prompts` | `config/remote/protected-prompts.json` | System prompts, summary prompts, default prompt modes |
-| `llm-providers` | `config/remote/llm-providers.json` | Provider endpoints and model lists |
-| `model-capabilities` | `config/remote/model-capabilities.json` | Per-model context slots, token limits, CQ readiness |
-
-**To update a config:** edit the JSON in `config/remote/`, bump the `version` integer, and redeploy. The iOS app picks up changes on next launch.
-
-**To add a new config:** drop a `.json` file with a `"version"` field into `config/remote/` and restart. The slug is the filename without `.json`.
 
 ## Related Projects
 
