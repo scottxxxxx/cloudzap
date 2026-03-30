@@ -577,9 +577,15 @@ async def chat(
     await usage_tracker.log_usage(db, user.id, body, response, elapsed_ms)
 
     # 9.5. Context Quilt capture (async, non-blocking) — only for enabled, not teaser
-    # Skip capture for post-meeting chat — user is consuming the quilt, not adding to it.
-    # The quilt was already built from the live meeting transcript at session end.
-    if cq_state == "enabled" and body.context_quilt and body.prompt_mode != "PostMeetingChat":
+    # Skip capture when:
+    # - Active meeting session (session_duration_sec set) — transcript captures at session end
+    # - Read-only chat modes — user is consuming the quilt, not adding to it
+    # - Auto-generated summaries and post-session analysis — derivatives of the transcript
+    _cq_skip_modes = ("PostMeetingChat", "ProjectChat", "AutoSummary", "PostSessionAnalysis")
+    if (cq_state == "enabled"
+            and body.context_quilt
+            and body.prompt_mode not in _cq_skip_modes
+            and body.session_duration_sec is None):
         asyncio.create_task(cq.capture(
             user_id=user.id,
             interaction_type=body.call_type or "query",
