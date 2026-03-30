@@ -1,6 +1,6 @@
 # Remote Config (iOS App)
 
-> **Last updated:** March 25, 2026
+> **Last updated:** March 29, 2026
 
 GhostPour serves JSON config files to the ShoulderSurf iOS app via `GET /v1/config/{name}`. This allows updating prompts, model lists, and capabilities without App Store releases.
 
@@ -20,7 +20,7 @@ GhostPour serves JSON config files to the ShoulderSurf iOS app via `GET /v1/conf
 | Slug | File | Purpose |
 |------|------|---------|
 | `idle-tips` | `config/remote/idle-tips.json` | Orb idle tip messages |
-| `protected-prompts` | `config/remote/protected-prompts.json` | System prompts, summary prompts, default prompt modes |
+| `SystemPrompts` | `config/remote/SystemPrompts.json` | System prompts, summary prompts, default prompt modes |
 | `llm-providers` | `config/remote/llm-providers.json` | Provider endpoints and model lists |
 | `model-capabilities` | `config/remote/model-capabilities.json` | Per-model context slots, token limits, CQ readiness |
 
