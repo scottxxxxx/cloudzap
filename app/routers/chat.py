@@ -765,8 +765,8 @@ async def get_quilt_graph(
     """Proxy: fetch user's quilt graph visualization from Context Quilt."""
     if user.id != user_id:
         raise HTTPException(status_code=403, detail="Cannot access another user's quilt")
-    if format not in ("svg", "png"):
-        raise HTTPException(status_code=400, detail="Format must be 'svg' or 'png'")
+    if format not in ("svg", "png", "html"):
+        raise HTTPException(status_code=400, detail="Format must be 'svg', 'png', or 'html'")
 
     settings = get_settings()
     if not settings.cq_base_url:
@@ -786,7 +786,8 @@ async def get_quilt_graph(
                 detail = resp.text or "Context Quilt error"
             raise HTTPException(status_code=resp.status_code, detail=detail)
 
-        content_type = "image/svg+xml" if format == "svg" else "image/png"
+        content_types = {"svg": "image/svg+xml", "png": "image/png", "html": "text/html"}
+        content_type = content_types.get(format, "application/octet-stream")
         size = len(resp.content)
         logger.info("quilt_graph_proxy", extra={"user_id": user_id, "format": format, "bytes": size})
         return Response(
