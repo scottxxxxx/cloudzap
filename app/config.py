@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     cq_recall_timeout_ms: int = 200    # Max wait for CQ recall (ms)
 
     # Database
-    database_url: str = "sqlite+aiosqlite:///./data/cloudzap.db"
+    database_url: str = "sqlite+aiosqlite:///./data/ghostpour.db"
 
     # Pricing
     pricing_source_url: str = (

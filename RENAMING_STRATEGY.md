@@ -1,7 +1,7 @@
 # CloudZap → GhostPour Renaming Strategy
 
 > **Created:** March 23, 2026
-> **Status:** Domain secured, rename not yet started
+> **Status:** In progress — infra/code rename done, iOS cutover + GitHub repo rename pending
 > **Domain:** ghostpour.com (TBD — being secured)
 
 ---
@@ -125,12 +125,13 @@ Undertow, Riptide, SurfRelay, Drift, Swell, Tideline, Backplane, Switchboard, Co
 
 ### Code & Infrastructure
 - [ ] Rename GitHub repo (`cloudzap` → `ghostpour`)
-- [ ] Update all `CZ_` env var prefixes → `GP_` (or keep `CZ_` for backwards compat, decide)
-- [ ] Update Docker image/container names
+- [x] Keep `CZ_` env var prefix for backwards compat (decided: keep)
+- [x] Update Docker image/container names (ghostpour, ghostpour-data)
 - [ ] Update `cz.shouldersurf.com` → new subdomain (e.g., `gp.shouldersurf.com` or `api.ghostpour.com`)
 - [ ] Update Nginx Proxy Manager routing
-- [ ] Update GHCR package names
-- [ ] Update GitHub Actions workflows
+- [x] Update GHCR package names in docker-compose.prod.yml
+- [x] Update GitHub Actions workflows (deploy path → /opt/ghostpour)
+- [x] Update default database path (ghostpour.db)
 
 ### iOS App (Shoulder Surf)
 - [ ] Update `CloudZapProvider.swift` → rename class/file
@@ -141,14 +142,25 @@ Undertow, Riptide, SurfRelay, Drift, Swell, Tideline, Backplane, Switchboard, Co
 - [ ] Update CLAUDE.md references
 
 ### Documentation
-- [ ] Update CloudZap CLAUDE.md
+- [x] Update GhostPour CLAUDE.md
 - [ ] Update Shoulder Surf CLAUDE.md
 - [ ] Update Subscription_Tiers.md
 - [ ] Update Context_Slot_System.md
 - [ ] Update planning docs references
-- [ ] Update memory files
+- [x] Update memory files
+- [x] Update README.md (badge URLs, clone URL, Docker examples)
+- [x] Update SECURITY.md (email, advisory URL)
+- [x] Update docs/deployment.md (container names, paths)
+- [x] Update docs/subscription-system.md (function names)
+- [x] Update .env.example (comments, default paths)
 
 ### External
-- [ ] Secure ghostpour.com domain
+- [x] Secure ghostpour.com domain
 - [ ] Update GitHub repo description
 - [ ] Update any external references (planning docs, handoff docs)
+
+### Intentionally NOT changed (backwards compatibility)
+- `CZ_` env var prefix — iOS app expects this
+- `cq_app_id: "cloudzap"` — Context Quilt auth identifier
+- Provider `"id": "cloudzap"` in llm-providers.json — iOS provider lookup
+- `"apiFormat": "cloudzap"` — adapter dispatch key
