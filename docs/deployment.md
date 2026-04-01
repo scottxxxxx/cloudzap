@@ -1,15 +1,15 @@
 # Deployment
 
-> **Last updated:** March 26, 2026
+> **Last updated:** April 1, 2026
 
 ## Infrastructure
 
 - **GCP VM**: `35.239.227.192` (weirtech-shared-infra, e2-medium, ~$25/mo)
-- **Container**: `cloudzap` on `proxy-tier` Docker network
-- **Routing**: Nginx Proxy Manager routes `cz.shouldersurf.com` → `cloudzap:8000`
+- **Container**: `ghostpour` on `proxy-tier` Docker network
+- **Routing**: Nginx Proxy Manager routes `cz.shouldersurf.com` → `ghostpour:8000`
 - **CI/CD**: Push to `main` → GitHub Actions builds image → pushes to GHCR → SSH deploys
-- **Data**: SQLite DB persisted in `cloudzap-data` Docker volume at `/app/data/`
-- **Server config**: `/opt/cloudzap/.env.prod` + `/opt/cloudzap/docker-compose.prod.yml`
+- **Data**: SQLite DB persisted in `ghostpour-data` Docker volume at `/app/data/`
+- **Server config**: `/opt/ghostpour/.env.prod` + `/opt/ghostpour/docker-compose.prod.yml`
 
 ## Manual deploy
 

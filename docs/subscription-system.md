@@ -111,7 +111,7 @@ Configured in `config/tiers.yml`. Five purchasable tiers plus admin:
             | Transaction verified locally
             v
    +---------------------------+
-   | iOS: verifyWithCloudZap() |
+   | iOS: verifyWithGhostPour()|
    | POST /v1/verify-receipt   |
    +--------+------------------+
             |

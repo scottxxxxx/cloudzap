@@ -1,19 +1,19 @@
 services:
-  cloudzap:
-    image: ghcr.io/scottxxxxx/cloudzap:latest
-    container_name: cloudzap
+  ghostpour:
+    image: ghcr.io/scottxxxxx/ghostpour:latest
+    container_name: ghostpour
     restart: unless-stopped
     expose:
       - "8000"
     volumes:
-      - cloudzap-data:/app/data
+      - ghostpour-data:/app/data
     env_file:
       - .env.prod
     networks:
       - proxy-tier
 
 volumes:
-  cloudzap-data:
+  ghostpour-data:
 
 networks:
   proxy-tier:

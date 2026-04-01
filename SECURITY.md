@@ -6,9 +6,9 @@ If you discover a security vulnerability in GhostPour, please report it responsi
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Instead, please email: **security@cloudzap.com**
+Instead, please email: **security@ghostpour.com**
 
-Or use [GitHub's private vulnerability reporting](https://github.com/scottxxxxx/cloudzap/security/advisories/new).
+Or use [GitHub's private vulnerability reporting](https://github.com/scottxxxxx/ghostpour/security/advisories/new).
 
 Include:
 - Description of the vulnerability
