@@ -584,10 +584,12 @@ async def chat(
     # - Active meeting session (session_duration_sec set) — transcript captures at session end
     # - Read-only chat modes — user is consuming the quilt, not adding to it
     # - Auto-generated summaries and post-session analysis — derivatives of the transcript
-    _cq_skip_modes = ("PostMeetingChat", "ProjectChat", "AutoSummary", "PostSessionAnalysis")
+    feature_config = request.app.state.feature_config
+    cq_feature = feature_config.features.get("context_quilt")
+    cq_skip_modes = set(cq_feature.capture_skip_modes) if cq_feature else set()
     if (cq_state == "enabled"
             and body.context_quilt
-            and body.get_meta("prompt_mode") not in _cq_skip_modes
+            and body.get_meta("prompt_mode") not in cq_skip_modes
             and body.get_meta("session_duration_sec") is None):
         asyncio.create_task(cq.capture(
             user_id=user.id,
