@@ -28,3 +28,8 @@ features:
     #              async apply(body, check_result) -> updated_body
     #              async on_response(user_id, body, response) -> None
     service_module: "context_quilt"
+    capture_skip_modes:
+      - "PostMeetingChat"
+      - "ProjectChat"
+      - "AutoSummary"
+      - "PostSessionAnalysis"
