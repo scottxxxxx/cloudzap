@@ -9,7 +9,7 @@
 
 **Live deployment:** `https://cz.shouldersurf.com`
 **Admin dashboard:** `https://cz.shouldersurf.com/admin`
-**GitHub:** `https://github.com/scottxxxxx/cloudzap`
+**GitHub:** `https://github.com/scottxxxxx/ghostpour`
 **Subscription spec:** `/Users/scottguida/ShoulderSurf/Subscription_Tiers.md` — full tier details, pricing, allocation, carryover, StoreKit config
 **Planning docs:** `shouldersurf-proxy-claude-code-plan.docx`, `Server side proxy-claude-code-plan.docx` (in repo root, gitignored)
 

@@ -1,7 +1,7 @@
 services:
-  cloudzap:
+  ghostpour:
     build: .
-    container_name: cloudzap
+    container_name: ghostpour
     ports:
       - "8000:8000"
     volumes:

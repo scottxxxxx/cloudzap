@@ -2,8 +2,8 @@
 
 > *Formerly CloudZap. The pour you never see.*
 
-[![Tests](https://github.com/scottxxxxx/cloudzap/actions/workflows/test.yml/badge.svg)](https://github.com/scottxxxxx/cloudzap/actions/workflows/test.yml)
-[![Deploy](https://github.com/scottxxxxx/cloudzap/actions/workflows/deploy.yml/badge.svg)](https://github.com/scottxxxxx/cloudzap/actions/workflows/deploy.yml)
+[![Tests](https://github.com/scottxxxxx/ghostpour/actions/workflows/test.yml/badge.svg)](https://github.com/scottxxxxx/ghostpour/actions/workflows/test.yml)
+[![Deploy](https://github.com/scottxxxxx/ghostpour/actions/workflows/deploy.yml/badge.svg)](https://github.com/scottxxxxx/ghostpour/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
@@ -26,8 +26,8 @@ GhostPour sits between your mobile/web app and LLM providers (OpenAI, Anthropic,
 
 ```bash
 # Clone
-git clone https://github.com/scottguida/cloudzap.git
-cd cloudzap
+git clone https://github.com/scottxxxxx/ghostpour.git
+cd ghostpour
 
 # Configure
 cp .env.example .env
@@ -132,14 +132,14 @@ GhostPour deploys as a Docker container behind any reverse proxy (Nginx, Traefik
 
 ```yaml
 services:
-  cloudzap:
-    image: ghcr.io/scottguida/cloudzap:latest
-    container_name: cloudzap
+  ghostpour:
+    image: ghcr.io/scottxxxxx/ghostpour:latest
+    container_name: ghostpour
     restart: unless-stopped
     expose:
       - "8000"
     volumes:
-      - cloudzap-data:/app/data
+      - ghostpour-data:/app/data
     env_file:
       - .env.prod
     networks:
