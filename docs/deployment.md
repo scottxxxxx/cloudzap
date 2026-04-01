@@ -4,9 +4,9 @@
 
 ## Infrastructure
 
-- **GCP VM**: `35.239.227.192` (weirtech-shared-infra, e2-medium, ~$25/mo)
+- **GCP VM**: GCP Compute Engine (e2-medium, ~$25/mo)
 - **Container**: `ghostpour` on `proxy-tier` Docker network
-- **Routing**: Nginx Proxy Manager routes `cz.shouldersurf.com` → `ghostpour:8000`
+- **Routing**: Nginx Proxy Manager routes `api.example.com` → `ghostpour:8000`
 - **CI/CD**: Push to `main` → GitHub Actions builds image → pushes to GHCR → SSH deploys
 - **Data**: SQLite DB persisted in `ghostpour-data` Docker volume at `/app/data/`
 - **Server config**: `/opt/ghostpour/.env.prod` + `/opt/ghostpour/docker-compose.prod.yml`

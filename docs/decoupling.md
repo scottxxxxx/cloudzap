@@ -1,17 +1,17 @@
-# Decoupling GhostPour from Shoulder Surf
+# Decoupling GhostPour from the client app
 
 > **Last updated:** April 1, 2026
 > **Status:** Phase 1 in progress (test harness), Phase 2 pending
 
 ## Why
 
-GhostPour is marketed as a generic LLM gateway but has Shoulder Surf meeting copilot concepts hardcoded into its core: prompt modes, meeting IDs, CQ capture skip lists, transcript endpoints, and StoreKit product IDs. A second customer would inherit SS's domain concepts. We need to decouple while keeping SS working exactly as-is.
+GhostPour is marketed as a generic LLM gateway but has the client app meeting copilot concepts hardcoded into its core: prompt modes, meeting IDs, CQ capture skip lists, transcript endpoints, and StoreKit product IDs. A second customer would inherit SS's domain concepts. We need to decouple while keeping clientworking exactly as-is.
 
 ## Constraint
 
 **SS iOS app must not break.** Same requests, same responses, same headers. Every refactor step is backwards compatible and verified by the integration test harness.
 
-## Current SS-Specific Coupling
+## Current client-Specific Coupling
 
 | Area | What's Hardcoded | Generic Alternative |
 |------|-----------------|-------------------|
@@ -19,7 +19,7 @@ GhostPour is marketed as a generic LLM gateway but has Shoulder Surf meeting cop
 | CQ capture skip list | `PostMeetingChat`, `ProjectChat`, `AutoSummary`, `PostSessionAnalysis` | Config-driven per feature |
 | CQ integration | Recall/capture embedded in chat endpoint | Pluggable feature hook |
 | Endpoints | `/capture-transcript`, `/quilt/*`, `/meetings/*` | Separate optional router |
-| Tier config | SS StoreKit product IDs | Per-app product ID mapping |
+| Tier config | clientStoreKit product IDs | Per-app product ID mapping |
 | `/v1/usage/me` | `summary_mode`, `summary_interval_minutes` | Nested `app_config` key |
 | Remote configs | Global namespace | Per-app prefix convention |
 
@@ -40,7 +40,7 @@ Built before any refactoring to catch regressions.
 - Quota exhausted → 429, 80% warning
 - Model access blocked → 403
 - CQ recall injection, capture fire/skip, teaser gating, disabled
-- Usage logging with SS field passthrough
+- Usage logging with clientfield passthrough
 
 ### Still needed
 - Auth flow (Apple auth, refresh rotation)
@@ -51,7 +51,7 @@ Built before any refactoring to catch regressions.
 ## Phase 2: Decouple (each step independently deployable)
 
 ### 2.1 ChatRequest metadata abstraction
-Add `metadata: dict` to ChatRequest with a validator that copies top-level SS fields into it. Add `get_meta(key)` helper. All downstream code reads via helper. SS sends same JSON — validator handles the mapping.
+Add `metadata: dict` to ChatRequest with a validator that copies top-level clientfields into it. Add `get_meta(key)` helper. All downstream code reads via helper. clientsends same JSON — validator handles the mapping.
 
 ### 2.2 Configurable capture skip list
 Move hardcoded `_cq_skip_modes` from `chat.py` into `config/features.yml` under `context_quilt.capture_skip_modes`. Read from config at runtime.
@@ -68,7 +68,7 @@ Change `storekit_product_id: str` → `app_product_ids: dict[str, str]` in tier 
 ### 2.6 Document remote config pattern
 Document per-app slug prefix convention in `docs/remote-config.md`. No code change.
 
-### 2.7 Extract SS fields from /v1/usage/me
+### 2.7 Extract clientfields from /v1/usage/me
 Move `summary_mode`, `summary_interval_minutes`, `max_images_per_request` under `app_config` key. Keep top-level for backwards compat.
 
 ## Sequencing
@@ -85,4 +85,4 @@ Phase 2:
 After each Phase 2 step:
 1. `pytest tests/ -v` — all tests must pass
 2. Deploy
-3. SS sends a real request — verify identical behavior
+3. clientsends a real request — verify identical behavior

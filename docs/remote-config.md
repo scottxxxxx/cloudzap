@@ -2,7 +2,7 @@
 
 > **Last updated:** March 29, 2026
 
-GhostPour serves JSON config files to the ShoulderSurf iOS app via `GET /v1/config/{name}`. This allows updating prompts, model lists, and capabilities without App Store releases.
+GhostPour serves JSON config files to the the client iOS app via `GET /v1/config/{name}`. This allows updating prompts, model lists, and capabilities without App Store releases.
 
 ## How it works
 

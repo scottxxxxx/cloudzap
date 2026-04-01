@@ -2,7 +2,7 @@
 
 > **Last updated:** April 1, 2026
 
-Post-public-repo security measures for the GhostPour + ShoulderSurf + Context Quilt stack.
+Post-public-repo security measures for the GhostPour + the client app + Context Quilt stack.
 
 ## Current Security Model
 
@@ -20,13 +20,13 @@ Post-public-repo security measures for the GhostPour + ShoulderSurf + Context Qu
 
 ## Hardening Measures (all deployed)
 
-### 1. SSL Certificate Pinning (ShoulderSurf iOS) — DEPLOYED
+### 1. SSL Certificate Pinning (the client app iOS) — DEPLOYED
 
 SS iOS app (build 1.0.6+) pins the Let's Encrypt intermediate CA and ISRG Root X1 public keys on all GhostPour API calls. This prevents MITM proxy tools (Charles, Proxyman, mitmproxy) from intercepting traffic, even on jailbroken devices.
 
 **Pinned services (SS side):**
-- CloudZapAuthManager (auth/token refresh)
-- CloudZapProvider (LLM queries)
+- AuthManager (auth/token refresh)
+- ChatProvider (LLM queries)
 - QuiltService (Context Quilt API)
 - RemoteConfigManager (config sync)
 - SubscriptionManager (receipt verification)
@@ -41,7 +41,7 @@ SS iOS app (build 1.0.6+) pins the Let's Encrypt intermediate CA and ISRG Root X
 
 | Certificate | Subject | Hash |
 |------------|---------|------|
-| Leaf (rotates every 90 days) | `CN=cz.shouldersurf.com` | `yAn+9RntePRrBk83oKSUhzd+brP6oYTCWqFYbIgnpGs=` |
+| Leaf (rotates every 90 days) | `CN=api.example.com` | `yAn+9RntePRrBk83oKSUhzd+brP6oYTCWqFYbIgnpGs=` |
 | **Intermediate (pinned)** | `C=US, O=Let's Encrypt, CN=E8` | `iFvwVyJSxnQdyaUvUERIf+8qk7gRze3612JMwoO3zdU=` |
 | **Root (pinned, backup)** | `C=US, O=ISRG, CN=ISRG Root X1` | `C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=` |
 

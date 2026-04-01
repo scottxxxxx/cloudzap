@@ -1,8 +1,8 @@
-# Subscription System: ShoulderSurf + StoreKit + GhostPour
+# Subscription System: the iOS app + StoreKit + GhostPour
 
 > **Last updated:** March 24, 2026
 >
-> This document describes how subscriptions are purchased, synced, enforced, and displayed across the full stack. Reference this from both the ShoulderSurf and GhostPour `CLAUDE.md` files.
+> This document describes how subscriptions are purchased, synced, enforced, and displayed across the full stack. Reference this from both the the iOS app and GhostPour `CLAUDE.md` files.
 
 ---
 
@@ -27,7 +27,7 @@ Three systems collaborate to manage subscriptions:
 
 ```
 +------------------+        +------------------+        +------------------+
-|  Apple App Store |        |   ShoulderSurf   |        |    GhostPour     |
+|  Apple App Store |        |   the iOS app   |        |    GhostPour     |
 |    (StoreKit 2)  |        |    (iOS app)     |        |   (API gateway)  |
 +--------+---------+        +--------+---------+        +--------+---------+
          |                           |                           |
@@ -57,7 +57,7 @@ Three systems collaborate to manage subscriptions:
 | Concern | Owner |
 |---------|-------|
 | Payment processing, receipts, trials, renewals | Apple (StoreKit 2) |
-| Purchase UI, entitlement detection, fallback UX | ShoulderSurf (iOS) |
+| Purchase UI, entitlement detection, fallback UX | the iOS app (iOS) |
 | Tier state, allocation tracking, model routing, quota enforcement | GhostPour (server) |
 
 **Key principle:** GhostPour is the source of truth for the user's tier and allocation. The iOS app tells GhostPour what StoreKit says, and GhostPour decides what the user gets.
@@ -88,10 +88,10 @@ Configured in `config/tiers.yml`. Five purchasable tiers plus admin:
 **Why summary interval varies by tier:** Auto-summaries are full chat requests that consume allocation. Every summary burns tokens. Sonnet is ~4x more expensive per token than Haiku, so Sonnet tiers default to 15-minute intervals instead of 10 to prevent users from burning through hours unexpectedly. This is a per-tier setting in `tiers.yml` (`summary_interval_minutes`) that the iOS app reads from `/v1/usage/me` and locks when using GhostPour.
 
 **StoreKit product IDs** (mapped in `tiers.yml`):
-- `com.weirtech.shouldersurf.sub.standard.monthly`
-- `com.weirtech.shouldersurf.sub.pro.monthly`
-- `com.weirtech.shouldersurf.sub.ultra.monthly`
-- `com.weirtech.shouldersurf.sub.ultramax.monthly`
+- `com.example.myapp.sub.standard.monthly`
+- `com.example.myapp.sub.pro.monthly`
+- `com.example.myapp.sub.ultra.monthly`
+- `com.example.myapp.sub.ultramax.monthly`
 
 ---
 
@@ -151,7 +151,7 @@ Configured in `config/tiers.yml`. Five purchasable tiers plus admin:
         |       |
         |       v  YES
         |   POST /v1/sync-subscription
-        |   { active_product_id: "com.weirtech...", is_trial: false }
+        |   { active_product_id: "com.example...", is_trial: false }
         |       |
         |       +-- Tier matches & trial state matches? --> { action: "none" }
         |       +-- Tier or trial state mismatch? --> Update tier + limit
@@ -400,7 +400,7 @@ Server-driven subscription UI. The iOS app renders tier cards from this data ins
         "Claude Haiku - fast and capable",
         "Auto-summaries every 10 min"
       ],
-      "storekit_product_id": "com.weirtech.shouldersurf.sub.standard.monthly"
+      "storekit_product_id": "com.example.myapp.sub.standard.monthly"
     }
   },
   "feature_definitions": {
@@ -586,9 +586,9 @@ monthly_allocation --> overage_balance --> 429 fallback to on-device
 | `app/routers/webhooks.py` | GhostPour | Admin set-tier, simulate-tier |
 | `app/models/user.py` | GhostPour | UserRecord with allocation fields |
 | `app/database.py` | GhostPour | Users table schema + migrations |
-| `SubscriptionManager.swift` | ShoulderSurf | StoreKit purchase, entitlement check, verify-receipt call |
-| `CloudZapAuthManager.swift` | ShoulderSurf | JWT auth, fetchUsageConfig(), tier constraint properties |
-| `CloudZapProvider.swift` | ShoulderSurf | Chat requests, response header parsing |
-| `TierCatalog.swift` | ShoulderSurf | GET /v1/tiers, server-driven subscription UI |
-| `UpgradePromptView.swift` | ShoulderSurf | Paywall UI, upgrade CTA, fallback option |
-| `SessionManager.swift` | ShoulderSurf | 429 detection, fallback switching, settings locks |
+| `SubscriptionManager.swift` | the iOS app | StoreKit purchase, entitlement check, verify-receipt call |
+| `AuthManager.swift` | the iOS app | JWT auth, fetchUsageConfig(), tier constraint properties |
+| `ChatProvider.swift` | the iOS app | Chat requests, response header parsing |
+| `TierCatalog.swift` | the iOS app | GET /v1/tiers, server-driven subscription UI |
+| `UpgradePromptView.swift` | the iOS app | Paywall UI, upgrade CTA, fallback option |
+| `SessionManager.swift` | the iOS app | 429 detection, fallback switching, settings locks |
