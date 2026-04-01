@@ -26,6 +26,7 @@ class FeatureDefinition(BaseModel):
     upgrade_cta: str = ""
     category: str = ""
     service_module: str = ""
+    capture_skip_modes: list[str] = []  # prompt_mode values that skip capture
 
 
 class FeatureConfig(BaseModel):
