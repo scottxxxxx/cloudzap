@@ -10,8 +10,10 @@ from starlette.responses import Response
 
 logger = logging.getLogger("ghostpour")
 
-# Paths to never log bodies for (sensitive or noisy)
-_SKIP_BODY_PATHS = {"/health", "/docs", "/openapi.json", "/v1/model-pricing"}
+# Paths to skip entirely (no buffer entry, no verbose log)
+_SKIP_PATHS = {"/health", "/docs", "/openapi.json", "/v1/model-pricing",
+               "/webhooks/admin/live-log", "/webhooks/admin/dashboard",
+               "/webhooks/admin/configs", "/admin"}
 
 # Max body size to log (prevent huge payloads from flooding logs)
 _MAX_BODY_LOG = 10_000
@@ -40,7 +42,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         # Capture request body
         req_body_str = None
-        if request.url.path not in _SKIP_BODY_PATHS:
+        if request.url.path not in _SKIP_PATHS:
             try:
                 raw = await request.body()
                 if raw:
@@ -51,7 +53,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         elapsed_ms = int((time.monotonic() - start) * 1000)
 
-        # Always log the summary line
+        if request.url.path in _SKIP_PATHS:
+            return response
+
+        # Log summary line for non-skipped paths
         logger.info(
             "%s %s %d %dms",
             request.method,
@@ -59,9 +64,6 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             response.status_code,
             elapsed_ms,
         )
-
-        if request.url.path in _SKIP_BODY_PATHS:
-            return response
 
         # Build request headers (redact auth)
         req_headers = {
