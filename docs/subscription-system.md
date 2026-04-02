@@ -1,6 +1,6 @@
 # Subscription System: the iOS app + StoreKit + GhostPour
 
-> **Last updated:** March 24, 2026
+> **Last updated:** April 2, 2026
 >
 > This document describes how subscriptions are purchased, synced, enforced, and displayed across the full stack. Reference this from both the the iOS app and GhostPour `CLAUDE.md` files.
 
@@ -50,6 +50,11 @@ Three systems collaborate to manage subscriptions:
          | Cancellation /            | POST /v1/sync-subscription| Downgrade to free
          | expiry                    |   (product_id: null)      |
          |<------------------------->|-------------------------->|
+         |                           |                           |
+         | Server Notification V2    |                           |
+         | (cancel, refund, renew,   | POST /v1/apple-           | Tier updated
+         |  billing failure, etc.)   |   notifications           | immediately
+         |---------------------------|-------------------------->|
 ```
 
 **Ownership boundaries:**
@@ -187,6 +192,39 @@ When a user upgrades (e.g., Standard -> Pro):
 2. On next app launch, `currentEntitlements` returns empty
 3. iOS calls `POST /v1/sync-subscription` with `active_product_id: null`
 4. GhostPour downgrades to free tier, resets allocation to $0.05
+
+Additionally, Apple sends a server notification (EXPIRED or REVOKE) to `POST /v1/apple-notifications`, which downgrades the user immediately — even if they never open the app again.
+
+### Apple Server Notifications V2
+
+GhostPour receives real-time subscription lifecycle events from Apple via `POST /v1/apple-notifications`. This closes the gap where cancellations, refunds, and billing failures were invisible until the user opened the app.
+
+**How it works:**
+1. Apple POSTs a signed JWS payload to the endpoint
+2. GhostPour verifies the JWS signature against Apple's certificate chain (x5c header → Apple Root CA - G3)
+3. Decodes the notification type and nested `signedTransactionInfo`
+4. Looks up the user by `originalTransactionId` (stored during `/v1/verify-receipt`) or `appAccountToken` (set by SS on new purchases)
+5. Updates the user's tier in the database
+
+**Notification handling:**
+
+| Notification Type | Action |
+|---|---|
+| `SUBSCRIBED` | Set tier based on product_id |
+| `DID_RENEW` | Confirm renewal; upgrade if tier changed |
+| `EXPIRED` | Downgrade to free |
+| `REVOKE` | Downgrade to free |
+| `GRACE_PERIOD_EXPIRED` | Downgrade to free |
+| `REFUND` | Downgrade to free immediately |
+| `DID_FAIL_TO_RENEW` | Log warning, keep tier active (Apple retries billing for up to 60 days) |
+| `TEST` | Log and acknowledge |
+| Others | Log, no action |
+
+**User lookup strategy:**
+- Primary: `originalTransactionId` from Apple's payload → `users.original_transaction_id` (stored when iOS calls `/v1/verify-receipt`)
+- Fallback: `appAccountToken` → `users.id` (SS sets this on new purchases; existing subscribers get it on next renewal)
+
+**Setup required:** Register `https://cz.shouldersurf.com/v1/apple-notifications` as the Server Notification URL in App Store Connect (App > App Information > App Store Server Notifications).
 
 ### Trial flow
 
