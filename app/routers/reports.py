@@ -134,7 +134,24 @@ async def generate_report(
     await usage_tracker.record_cost(db, user.id, request_cost, tier, user=user)
     await usage_tracker.log_usage(db, user.id, chat_request, response, elapsed_ms)
 
-    # 5. Parse the LLM response as JSON
+    # 5. Parse the LLM response as JSON and render
+    # Wrapped in try/except to log the actual error — unhandled exceptions here
+    # result in bare "Internal Server Error" with no request_id.
+    try:
+        return await _build_report_response(
+            response, body, db, user, report_model, request_cost, elapsed_ms, meeting_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Report post-processing failed for meeting %s: %s", meeting_id, e, exc_info=True)
+        raise HTTPException(status_code=502, detail={
+            "code": "report_render_error",
+            "message": f"Report generated but post-processing failed: {e}",
+        })
+
+
+async def _build_report_response(response, body, db, user, report_model, request_cost, elapsed_ms, meeting_id):
     report_text = response.text.strip()
     # Strip markdown fencing if the model added it despite instructions
     if report_text.startswith("```"):
@@ -206,7 +223,7 @@ async def generate_report(
             response.output_tokens,
             request_cost,
             elapsed_ms,
-            now.isoformat(),
+            meeting_dt.isoformat(),
         ),
     )
     await db.commit()
