@@ -20,38 +20,31 @@ from app.models.user import UserRecord
 router = APIRouter()
 
 
-def _resolve_model_routing(request: Request, body: ChatRequest, tier) -> str | None:
+def _resolve_model_routing(
+    request: Request, body: ChatRequest, tier, tier_name: str
+) -> str | None:
     """Resolve which model to use for an 'auto' request.
 
-    Priority:
-    1. model-routing config: app_id + call_type → specific model
-    2. model-routing config: app_id + "default" → app default model
-    3. Tier's default_model (from tiers.yml)
+    Checks the model-routing config (editable via admin dashboard):
+      apps.<app_id>.call_types.<call_type>.models.<tier_name> → model
 
-    The model-routing config is editable via the admin dashboard Configs tab,
-    so model selection can be changed without code deploys.
+    Falls back to the tier's default_model if no routing match is found.
     """
     configs = request.app.state.remote_configs
-    routing = configs.get("model-routing", {}).get("routes", {})
+    routing = configs.get("model-routing", {}).get("apps", {})
 
     if routing:
         app_id = getattr(request.state, "app_id", "unknown")
         call_type = body.get_meta("call_type")
 
-        app_routes = routing.get(app_id, {})
-        if not app_routes:
-            app_routes = routing.get("_default", {})
-
-        # Check specific call_type route
-        if call_type and call_type in app_routes:
-            model = app_routes[call_type]
-            if model:
-                return model
-
-        # Check app default
-        app_default = app_routes.get("default")
-        if app_default:
-            return app_default
+        app_config = routing.get(app_id, {})
+        if app_config and call_type:
+            call_config = app_config.get("call_types", {}).get(call_type, {})
+            if call_config:
+                models = call_config.get("models", {})
+                model = models.get(tier_name) or models.get("default")
+                if model:
+                    return model
 
     # Fall back to tier's default model
     return tier.default_model
@@ -592,7 +585,7 @@ async def chat(
 
     # 2. Resolve "auto" model — check model-routing config first, then tier default
     if body.model == "auto" or body.provider == "auto":
-        resolved_model = _resolve_model_routing(request, body, tier)
+        resolved_model = _resolve_model_routing(request, body, tier, effective_tier_name)
         if not resolved_model:
             raise HTTPException(
                 status_code=400,
