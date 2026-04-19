@@ -178,6 +178,7 @@
     <div class="tab" onclick="switchTab('providers')">Providers</div>
     <div class="tab" onclick="switchTab('errors')">Errors</div>
     <div class="tab" onclick="switchTab('configs')">Configs</div>
+    <div class="tab" onclick="switchTab('routing')">Model Routing</div>
     <div class="tab" onclick="switchTab('livelog')">Live Log</div>
   </div>
 
@@ -321,6 +322,17 @@
         </div>
       </div>
       <textarea id="config-editor" style="width:100%;min-height:500px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'SF Mono',Menlo,monospace;font-size:13px;resize:vertical;tab-size:2" spellcheck="false"></textarea>
+    </div>
+  </div>
+
+  <!-- Model Routing -->
+  <div id="tab-routing" class="section">
+    <h3>Model Routing</h3>
+    <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px">Control which model serves each query type per app and subscription tier. Changes take effect immediately.</p>
+    <div id="routing-grid"></div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="refresh-btn" onclick="saveRouting()" style="background:var(--green);color:#000;font-weight:600">Save Changes</button>
+      <span id="routing-status" style="font-size:12px;color:var(--text-dim);line-height:32px"></span>
     </div>
   </div>
 
@@ -1159,6 +1171,97 @@ document.getElementById('livelog-auto').addEventListener('change', function() {
   clearInterval(_livelogTimer);
   if (this.checked) loadLiveLog();
 });
+
+// --- Model Routing ---
+let _routingData = null;
+
+async function loadRouting() {
+  const data = await fetch(`${BASE}/webhooks/admin/config/model-routing`, {
+    headers: {'X-Admin-Key': adminKey}
+  }).then(r => r.json());
+  _routingData = data.data;
+  renderRouting();
+}
+
+function renderRouting() {
+  if (!_routingData) return;
+  const grid = document.getElementById('routing-grid');
+  const models = _routingData.models || [];
+  const apps = _routingData.apps || {};
+
+  let html = '';
+  for (const [appId, app] of Object.entries(apps)) {
+    html += `<div style="margin-bottom:24px;border:1px solid var(--border);border-radius:8px;overflow:hidden">`;
+    html += `<div style="background:var(--bg-card);padding:12px 16px;border-bottom:1px solid var(--border)">`;
+    html += `<h4 style="margin:0;color:var(--accent)">${app.label || appId}</h4>`;
+    html += `<span style="font-size:11px;color:var(--text-dim)">App ID: ${appId} · Tiers: ${(app.tiers||[]).join(', ')}</span>`;
+    html += `</div>`;
+
+    // Table header
+    const tiers = app.tiers || [];
+    html += `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">`;
+    html += `<tr style="background:var(--bg-card)">`;
+    html += `<th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--text-dim);border-bottom:1px solid var(--border)">Query Type</th>`;
+    for (const t of tiers) {
+      html += `<th style="text-align:center;padding:8px 8px;font-size:11px;color:var(--text-dim);border-bottom:1px solid var(--border)">${t}</th>`;
+    }
+    html += `</tr>`;
+
+    // Rows
+    const callTypes = app.call_types || {};
+    for (const [ctId, ct] of Object.entries(callTypes)) {
+      html += `<tr style="border-bottom:1px solid var(--border)">`;
+      html += `<td style="padding:8px 12px;font-size:13px;font-weight:500">${ct.label || ctId}</td>`;
+      const ctModels = ct.models || {};
+      for (const t of tiers) {
+        const current = ctModels[t] || '';
+        html += `<td style="padding:4px 4px;text-align:center">`;
+        html += `<select data-app="${appId}" data-ct="${ctId}" data-tier="${t}" style="font-size:11px;padding:3px 4px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:4px;width:100%">`;
+        for (const m of models) {
+          const sel = current === m.id ? ' selected' : '';
+          html += `<option value="${m.id}"${sel}>${m.label}</option>`;
+        }
+        html += `</select></td>`;
+      }
+      html += `</tr>`;
+    }
+    html += `</table></div>`;
+  }
+  grid.innerHTML = html;
+}
+
+async function saveRouting() {
+  if (!_routingData) return;
+  // Read all selects back into the data
+  document.querySelectorAll('#routing-grid select').forEach(sel => {
+    const app = sel.dataset.app;
+    const ct = sel.dataset.ct;
+    const tier = sel.dataset.tier;
+    if (_routingData.apps[app] && _routingData.apps[app].call_types[ct]) {
+      _routingData.apps[app].call_types[ct].models[tier] = sel.value;
+    }
+  });
+  _routingData.version = (_routingData.version || 0) + 1;
+
+  const resp = await fetch(`${BASE}/webhooks/admin/config/model-routing`, {
+    method: 'PUT',
+    headers: {'X-Admin-Key': adminKey, 'Content-Type': 'application/json'},
+    body: JSON.stringify({data: _routingData}),
+  });
+  if (resp.ok) {
+    document.getElementById('routing-status').textContent = `Saved v${_routingData.version} — changes are live`;
+    setTimeout(() => document.getElementById('routing-status').textContent = '', 3000);
+  } else {
+    document.getElementById('routing-status').textContent = 'Save failed!';
+  }
+}
+
+// Load routing when tab is shown
+const _origSwitchTab = switchTab;
+switchTab = function(tab) {
+  _origSwitchTab(tab);
+  if (tab === 'routing' && !_routingData) loadRouting();
+};
 </script>
 </body>
 </html>
