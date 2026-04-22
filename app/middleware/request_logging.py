@@ -92,7 +92,36 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         if auth:
             req_headers["authorization"] = auth.split()[0] + " <redacted>" if " " in auth else "<redacted>"
 
-        # Capture response body by reading the stream
+        # For streaming responses (SSE), don't consume the body — return
+        # the response as-is so chunks flow to the client immediately.
+        is_streaming = response.media_type == "text/event-stream"
+
+        if is_streaming:
+            resp_headers = dict(response.headers)
+            entry = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "request_id": request_id,
+                "app_id": request.state.app_id,
+                "method": request.method,
+                "path": request.url.path,
+                "query": str(request.url.query) if request.url.query else None,
+                "status": response.status_code,
+                "latency_ms": elapsed_ms,
+                "client_ip": request.headers.get("x-real-ip", request.client.host if request.client else "unknown"),
+                "user_agent": request.headers.get("user-agent", ""),
+                "request": {
+                    "headers": req_headers,
+                    "body": _format_body_parsed(req_body_str),
+                },
+                "response": {
+                    "headers": resp_headers,
+                    "body": "(streaming — not captured)",
+                },
+            }
+            _LOG_BUFFER.append(entry)
+            return response
+
+        # Non-streaming: capture response body for logging
         resp_body = b""
         async for chunk in response.body_iterator:
             resp_body += chunk if isinstance(chunk, bytes) else chunk.encode()
