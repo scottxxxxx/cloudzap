@@ -1,67 +1,47 @@
 {
-  "version": 1,
+  "version": 2,
   "tiers": {
     "free": {
       "display_name": "Free",
       "description": "Try AI-powered meeting assistance with a small free credit.",
       "feature_bullets": [
-        "~1 hour of AI assistance",
-        "Claude Haiku — fast and capable",
-        "Auto-summaries every 10 min",
+        "5 meetings/month with AI assistance",
+        "Real-time auto-summaries",
+        "On-device transcription (unlimited)",
         "1 image per query"
       ]
     },
-    "standard": {
-      "display_name": "Standard",
-      "description": "Monthly AI meeting assistance for regular use.",
+    "plus": {
+      "display_name": "Plus",
+      "description": "Unlimited AI-powered meeting assistance. Summaries, reports, and project chat.",
       "feature_bullets": [
-        "25 hours/month of AI assistance",
-        "Claude Haiku — fast and capable",
-        "Auto-summaries every 10 minutes",
-        "1 image per query",
-        "Meeting memory available with Pro"
+        "Unlimited meetings with AI assistance",
+        "Real-time auto-summaries",
+        "Shareable meeting reports",
+        "Project chat across meetings",
+        "3 images per query",
+        "Standard AI"
       ]
     },
     "pro": {
       "display_name": "Pro",
-      "description": "More hours, image analysis, and meeting memory.",
+      "description": "Everything in Plus with advanced AI for deeper reports and Meeting Memory.",
       "feature_bullets": [
-        "50 hours/month of AI assistance",
-        "Claude Haiku — fast and capable",
-        "Auto-summaries every 10 minutes",
-        "2 images per query",
-        "Context Quilt — AI remembers past meetings"
-      ]
-    },
-    "ultra": {
-      "display_name": "Ultra",
-      "description": "Our smartest model with full summary control.",
-      "feature_bullets": [
-        "25 hours/month of AI assistance",
-        "Claude Sonnet — our smartest model",
+        "Unlimited meetings with AI assistance",
+        "Advanced AI for reports and analysis",
+        "Meeting Memory: AI remembers past meetings",
         "Full or delta summaries (your choice)",
-        "3 images per query",
-        "Context Quilt — AI remembers past meetings"
-      ]
-    },
-    "ultra_max": {
-      "display_name": "Ultra Max",
-      "description": "Maximum capacity with our smartest model.",
-      "feature_bullets": [
-        "50 hours/month of AI assistance",
-        "Claude Sonnet — our smartest model",
-        "Full or delta summaries (your choice)",
-        "5 images per query",
-        "Context Quilt — AI remembers past meetings"
+        "Project chat across meetings",
+        "5 images per query"
       ]
     }
   },
   "feature_definitions": {
     "context_quilt": {
-      "display_name": "Context Quilt",
-      "description": "Cross-meeting memory and entity recall. Your AI remembers past meetings and uses that knowledge automatically.",
+      "display_name": "Meeting Memory",
+      "description": "Your AI remembers past meetings and uses that knowledge automatically.",
       "teaser_description": "Your AI found connections to your past meetings",
-      "upgrade_cta": "Upgrade to Pro to unlock meeting memory"
+      "upgrade_cta": "Upgrade to Pro to unlock Meeting Memory"
     }
   }
 }
