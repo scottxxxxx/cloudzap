@@ -1,67 +1,47 @@
 {
-  "version": 1,
+  "version": 2,
   "tiers": {
     "free": {
       "display_name": "Gratis",
       "description": "Prueba la asistencia de IA para reuniones con un pequeño crédito gratuito.",
       "feature_bullets": [
-        "~1 hora de asistencia de IA",
-        "Claude Haiku — rápido y capaz",
-        "Resúmenes automáticos cada 10 min",
+        "5 reuniones/mes con asistencia de IA",
+        "Resúmenes automáticos en tiempo real",
+        "Transcripción en el dispositivo (ilimitada)",
         "1 imagen por consulta"
       ]
     },
-    "standard": {
-      "display_name": "Estándar",
-      "description": "Asistencia mensual de IA para reuniones de uso regular.",
+    "plus": {
+      "display_name": "Plus",
+      "description": "Asistencia de IA ilimitada para reuniones. Resúmenes, informes y chat de proyecto.",
       "feature_bullets": [
-        "25 horas/mes de asistencia de IA",
-        "Claude Haiku — rápido y capaz",
-        "Resúmenes automáticos cada 10 minutos",
-        "1 imagen por consulta",
-        "Memoria de reuniones disponible con Pro"
+        "Reuniones ilimitadas con asistencia de IA",
+        "Resúmenes automáticos en tiempo real",
+        "Informes de reuniones compartibles",
+        "Chat de proyecto entre reuniones",
+        "3 imágenes por consulta",
+        "IA estándar"
       ]
     },
     "pro": {
       "display_name": "Pro",
-      "description": "Más horas, análisis de imágenes y memoria de reuniones.",
+      "description": "Todo lo de Plus con IA avanzada para informes más profundos y Memoria de Reuniones.",
       "feature_bullets": [
-        "50 horas/mes de asistencia de IA",
-        "Claude Haiku — rápido y capaz",
-        "Resúmenes automáticos cada 10 minutos",
-        "2 imágenes por consulta",
-        "Context Quilt — la IA recuerda reuniones pasadas"
-      ]
-    },
-    "ultra": {
-      "display_name": "Ultra",
-      "description": "Nuestro modelo más inteligente con control total de resúmenes.",
-      "feature_bullets": [
-        "25 horas/mes de asistencia de IA",
-        "Claude Sonnet — nuestro modelo más inteligente",
+        "Reuniones ilimitadas con asistencia de IA",
+        "IA avanzada para informes y análisis",
+        "Memoria de Reuniones: la IA recuerda reuniones pasadas",
         "Resúmenes completos o incrementales (tu elección)",
-        "3 imágenes por consulta",
-        "Context Quilt — la IA recuerda reuniones pasadas"
-      ]
-    },
-    "ultra_max": {
-      "display_name": "Ultra Max",
-      "description": "Máxima capacidad con nuestro modelo más inteligente.",
-      "feature_bullets": [
-        "50 horas/mes de asistencia de IA",
-        "Claude Sonnet — nuestro modelo más inteligente",
-        "Resúmenes completos o incrementales (tu elección)",
-        "5 imágenes por consulta",
-        "Context Quilt — la IA recuerda reuniones pasadas"
+        "Chat de proyecto entre reuniones",
+        "5 imágenes por consulta"
       ]
     }
   },
   "feature_definitions": {
     "context_quilt": {
-      "display_name": "Context Quilt",
-      "description": "Memoria entre reuniones y recuperación de entidades. Tu IA recuerda reuniones pasadas y usa ese conocimiento automáticamente.",
+      "display_name": "Memoria de Reuniones",
+      "description": "Tu IA recuerda reuniones pasadas y usa ese conocimiento automáticamente.",
       "teaser_description": "Tu IA encontró conexiones con tus reuniones pasadas",
-      "upgrade_cta": "Actualiza a Pro para desbloquear la memoria de reuniones"
+      "upgrade_cta": "Actualiza a Pro para desbloquear Memoria de Reuniones"
     }
   }
 }
