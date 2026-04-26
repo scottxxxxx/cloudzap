@@ -33,3 +33,10 @@ features:
       - "ProjectChat"
       - "AutoSummary"
       - "PostSessionAnalysis"
+
+  meeting_reports:
+    display_name: "Meeting Reports"
+    description: "Generate shareable HTML reports from your meeting transcripts — sentiment, key moments, suggested tags, and your speaker notes."
+    teaser_description: "Reports turn your meetings into shareable summaries."
+    upgrade_cta: "Upgrade to Plus to generate shareable meeting reports"
+    category: "intelligence"
