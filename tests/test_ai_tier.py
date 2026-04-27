@@ -1,25 +1,25 @@
-from app.services.ai_tier import infer_ai_tier
+from app.services.ai_tier import tier_to_ai_tier
 
 
-def test_haiku_maps_to_standard():
-    assert infer_ai_tier("claude-haiku-4-5-20251001") == "standard"
+def test_pro_maps_to_advanced():
+    assert tier_to_ai_tier("pro") == "advanced"
 
 
-def test_sonnet_maps_to_advanced():
-    assert infer_ai_tier("claude-sonnet-4-6") == "advanced"
+def test_admin_maps_to_advanced():
+    assert tier_to_ai_tier("admin") == "advanced"
 
 
-def test_opus_maps_to_advanced():
-    assert infer_ai_tier("claude-opus-4-7") == "advanced"
+def test_plus_maps_to_standard():
+    assert tier_to_ai_tier("plus") == "standard"
+
+
+def test_free_maps_to_standard():
+    assert tier_to_ai_tier("free") == "standard"
 
 
 def test_unknown_falls_back_to_standard():
-    assert infer_ai_tier("gpt-5") == "standard"
-    assert infer_ai_tier("") == "standard"
-    assert infer_ai_tier(None) == "standard"
-
-
-def test_anthropic_prefix_does_not_confuse_match():
-    # Provider prefix shouldn't trip the substring search.
-    assert infer_ai_tier("anthropic/claude-haiku-4-5-20251001") == "standard"
-    assert infer_ai_tier("anthropic/claude-sonnet-4-6") == "advanced"
+    # New tiers (e.g., byok) and unknown values stay in the cheaper bucket.
+    assert tier_to_ai_tier("byok") == "standard"
+    assert tier_to_ai_tier("anything") == "standard"
+    assert tier_to_ai_tier("") == "standard"
+    assert tier_to_ai_tier(None) == "standard"

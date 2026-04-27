@@ -736,6 +736,11 @@ async def chat(
         if feature_name in hook_results:
             await hook.after_llm(user, body, response, hook_results[feature_name], state)
 
+    # Server-controlled tier label. Decoupled from `response.model` so we
+    # can swap models per tier without breaking iOS attribution UI.
+    from app.services.ai_tier import tier_to_ai_tier
+    response.ai_tier = tier_to_ai_tier(effective_tier_name)
+
     # 10. Build response with allocation headers
     response_data = response.model_dump()
     json_response = JSONResponse(content=response_data)
@@ -842,6 +847,8 @@ async def _handle_stream(
                 if feature_name in hook_results:
                     await hook.after_llm(user, body, final_response, hook_results[feature_name], state)
 
+        from app.services.ai_tier import tier_to_ai_tier
+
         # Final event with metadata (tokens, cost, allocation)
         done_data = {
             "type": "done",
@@ -849,6 +856,7 @@ async def _handle_stream(
             "output_tokens": final_response.output_tokens if final_response else None,
             "cost": final_response.cost if final_response else None,
             "usage": final_response.usage if final_response else None,
+            "ai_tier": tier_to_ai_tier(user.effective_tier),
         }
         if effective_limit != -1:
             new_used = monthly_used + request_cost

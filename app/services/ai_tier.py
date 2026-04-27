@@ -1,19 +1,17 @@
-"""Map provider model identifiers to abstract AI tier labels.
+"""Map subscription tier to abstract AI tier label clients render.
 
-Clients render `ai_tier` instead of raw model names so we can swap models
-without breaking client-side mappings or leaking model identity into UI.
+Decoupled from the model identity: clients render `ai_tier` based on
+*what the user is paying for*, not what model happened to answer the
+request. Lets us swap models per tier without breaking iOS attribution.
 """
 
 
-def infer_ai_tier(model: str | None) -> str:
-    """Return "standard" or "advanced" for the given model name.
+def tier_to_ai_tier(tier_name: str | None) -> str:
+    """Return "standard" or "advanced" for the given subscription tier.
 
-    Anything not recognized falls through to "standard" — safe default that
-    matches the cheaper-quality bucket.
+    Pro and admin → "advanced" (tier promise: Advanced AI for reports/analysis).
+    Everything else (free, plus, byok, unknown) → "standard".
     """
-    if not model:
-        return "standard"
-    name = model.lower()
-    if "sonnet" in name or "opus" in name:
+    if tier_name in ("pro", "admin"):
         return "advanced"
     return "standard"
