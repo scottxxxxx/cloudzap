@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "tiers": {
     "free": {
       "display_name": "Gratis",
@@ -84,6 +84,12 @@
       "description": "Tu IA recuerda reuniones pasadas y usa ese conocimiento automáticamente.",
       "teaser_description": "Tu IA encontró conexiones con tus reuniones pasadas",
       "upgrade_cta": "Actualiza a Pro para desbloquear Memoria de Reuniones"
+    },
+    "meeting_reports": {
+      "display_name": "Informes de reuniones",
+      "description": "Genera informes HTML compartibles desde las transcripciones de tus reuniones — análisis de sentimiento, momentos clave, etiquetas sugeridas y tus notas.",
+      "teaser_description": "Convierte tus reuniones en resúmenes compartibles.",
+      "upgrade_cta": "Actualiza a Plus para generar informes de reuniones compartibles"
     }
   }
 }

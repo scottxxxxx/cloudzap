@@ -50,7 +50,7 @@ tiers:
     storekit_product_id: ""
     features:
       context_quilt: "disabled"
-      meeting_reports: "disabled"
+      meeting_reports: "enabled"
       project_chat: "disabled"
     feature_bullets:
       - "~5 hours/month of AI assistance"

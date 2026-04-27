@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "tiers": {
     "free": {
       "display_name": "無料",
@@ -84,6 +84,12 @@
       "description": "AIが過去の会議を記憶し、その知識を自動的に活用します。",
       "teaser_description": "AIが過去の会議とのつながりを発見しました",
       "upgrade_cta": "Proにアップグレードしてミーティングメモリーを解除"
+    },
+    "meeting_reports": {
+      "display_name": "ミーティングレポート",
+      "description": "ミーティングの記録から共有可能なHTMLレポートを生成 — 感情分析、重要な瞬間、推奨タグ、メモ。",
+      "teaser_description": "レポートでミーティングを共有可能なサマリーに。",
+      "upgrade_cta": "Plusにアップグレードして共有可能なミーティングレポートを生成"
     }
   }
 }

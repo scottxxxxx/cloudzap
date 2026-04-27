@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "tiers": {
     "free": {
       "display_name": "Free",
@@ -84,6 +84,12 @@
       "description": "Your AI remembers past meetings and uses that knowledge automatically.",
       "teaser_description": "Your AI found connections to your past meetings",
       "upgrade_cta": "Upgrade to Pro to unlock Meeting Memory"
+    },
+    "meeting_reports": {
+      "display_name": "Meeting Reports",
+      "description": "Generate shareable HTML reports from your meeting transcripts — sentiment, key moments, suggested tags, and your speaker notes.",
+      "teaser_description": "Reports turn your meetings into shareable summaries.",
+      "upgrade_cta": "Upgrade to Plus to generate shareable meeting reports"
     }
   }
 }
