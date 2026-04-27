@@ -20,6 +20,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.chat import ChatRequest
 from app.models.user import UserRecord
+from app.services.ai_tier import tier_to_ai_tier
 from app.services.meeting_report import (
     build_report_prompt,
     format_duration,
@@ -229,11 +230,13 @@ async def _build_report_response(response, body, db, user, report_model, request
 
     # 7. Cache the report for recovery (30-day retention, purged on startup)
     report_json_str = json.dumps(report_json, ensure_ascii=False)
+    ai_tier = tier_to_ai_tier(user.effective_tier)
     await db.execute(
         """INSERT OR REPLACE INTO meeting_reports
            (id, user_id, meeting_id, report_json, report_html,
-            model, input_tokens, output_tokens, cost_usd, generation_ms, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            model, ai_tier, input_tokens, output_tokens, cost_usd,
+            generation_ms, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             str(uuid.uuid4()),
             user.id,
@@ -241,6 +244,7 @@ async def _build_report_response(response, body, db, user, report_model, request
             report_json_str,
             report_html,
             report_model,
+            ai_tier,
             response.input_tokens,
             response.output_tokens,
             request_cost,
@@ -254,6 +258,7 @@ async def _build_report_response(response, body, db, user, report_model, request
         "report_html": report_html,
         "report_json": report_json,
         "meeting_id": meeting_id,
+        "ai_tier": ai_tier,
         "input_tokens": response.input_tokens,
         "output_tokens": response.output_tokens,
         "cost_usd": request_cost,
@@ -285,10 +290,18 @@ async def get_cached_report(
             "message": f"No cached report for meeting {meeting_id}. Generate one with POST first.",
         })
 
+    # ai_tier was added in a later schema rev. Old rows return None;
+    # iOS falls back to whatever attribution it had (or skips).
+    try:
+        cached_ai_tier = row["ai_tier"]
+    except (IndexError, KeyError):
+        cached_ai_tier = None
+
     return {
         "report_html": row["report_html"],
         "report_json": json.loads(row["report_json"]),
         "meeting_id": meeting_id,
+        "ai_tier": cached_ai_tier,
         "input_tokens": row["input_tokens"],
         "output_tokens": row["output_tokens"],
         "cost_usd": row["cost_usd"],
