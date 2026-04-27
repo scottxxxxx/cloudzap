@@ -114,6 +114,9 @@ MIGRATIONS = [
     )""",
     "CREATE INDEX IF NOT EXISTS idx_reports_meeting ON meeting_reports(meeting_id)",
     "CREATE INDEX IF NOT EXISTS idx_reports_created ON meeting_reports(created_at)",
+    # v11: Persist tier-derived ai_tier label at generation time so cached
+    # GETs return a stable label that survives model swaps.
+    "ALTER TABLE meeting_reports ADD COLUMN ai_tier TEXT",
 ]
 
 

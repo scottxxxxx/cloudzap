@@ -27,6 +27,17 @@ class TestChatBasicFlow:
         assert "text" in data
         assert data["provider"] == "anthropic"
         assert data["model"] == "claude-haiku-4-5-20251001"
+        # ai_tier abstraction: clients should render this instead of raw model.
+        # Free tier → "standard". Decoupled from model identity.
+        assert data["ai_tier"] == "standard"
+
+    def test_chat_ai_tier_advanced_for_pro(self, client, pro_user):
+        """Pro tier → ai_tier=advanced regardless of which model answered."""
+        resp = client.post("/v1/chat", json=chat_request(), headers=pro_user["headers"])
+        assert resp.status_code == 200
+        # ai_tier reflects the user's subscription, not the model name.
+        # Pro stays "advanced" even if we serve them Haiku for cost reasons.
+        assert resp.json()["ai_tier"] == "advanced"
 
     def test_chat_allocation_headers_present(self, client, free_user):
         """Response includes allocation tracking headers."""
