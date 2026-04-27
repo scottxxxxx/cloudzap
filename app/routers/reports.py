@@ -20,6 +20,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.chat import ChatRequest
 from app.models.user import UserRecord
+from app.services.ai_tier import infer_ai_tier
 from app.services.meeting_report import (
     build_report_prompt,
     format_duration,
@@ -254,6 +255,7 @@ async def _build_report_response(response, body, db, user, report_model, request
         "report_html": report_html,
         "report_json": report_json,
         "meeting_id": meeting_id,
+        "ai_tier": infer_ai_tier(report_model),
         "input_tokens": response.input_tokens,
         "output_tokens": response.output_tokens,
         "cost_usd": request_cost,
@@ -289,6 +291,7 @@ async def get_cached_report(
         "report_html": row["report_html"],
         "report_json": json.loads(row["report_json"]),
         "meeting_id": meeting_id,
+        "ai_tier": infer_ai_tier(row["model"]),
         "input_tokens": row["input_tokens"],
         "output_tokens": row["output_tokens"],
         "cost_usd": row["cost_usd"],

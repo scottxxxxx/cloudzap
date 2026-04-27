@@ -1,6 +1,8 @@
 from typing import Any
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, computed_field, model_validator
+
+from app.services.ai_tier import infer_ai_tier
 
 
 _CHAT_META_FIELDS = (
@@ -77,6 +79,14 @@ class ChatResponse(BaseModel):
     cost: dict | None = None
     raw_request_json: str | None = None
     raw_response_json: str | None = None
+
+    @computed_field
+    @property
+    def ai_tier(self) -> str:
+        """Abstract tier label ("standard" | "advanced") clients should render
+        instead of `model` for cloud responses. Server-controlled so we can
+        swap models without breaking iOS attribution UI."""
+        return infer_ai_tier(self.model)
 
 
 class ErrorDetail(BaseModel):

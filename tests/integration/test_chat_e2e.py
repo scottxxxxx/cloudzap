@@ -27,6 +27,8 @@ class TestChatBasicFlow:
         assert "text" in data
         assert data["provider"] == "anthropic"
         assert data["model"] == "claude-haiku-4-5-20251001"
+        # ai_tier abstraction: clients should render this instead of raw model.
+        assert data["ai_tier"] == "standard"
 
     def test_chat_allocation_headers_present(self, client, free_user):
         """Response includes allocation tracking headers."""
