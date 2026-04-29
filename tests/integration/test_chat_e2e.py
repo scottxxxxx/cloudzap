@@ -199,17 +199,16 @@ class TestChatStreamTimeout:
 class TestProjectChatPolicy:
     """ProjectChat goes through the policy resolver (replaces PR #80 canned intercept).
 
-    Default policy: gp_chat_flag="ssai", free_quota_per_month=1.
-    Under ssai mode, all logged-in users route to GP. CTA only fires for
-    Free users with external model selected AND no quota remaining
-    ("metered gate" — first send is the freebie, CTA on the second).
+    Default policy: gp_chat_flag="ssai_free_only", free_quota_per_month=1.
+    ssai_free_only applies ssai semantics for Free tier (override + metered
+    CTA) and logged_in semantics for paid tiers (respect BYOK). CTA only
+    fires for Free + external + quota exhausted.
     """
 
     def test_free_user_project_chat_default_no_cta(self, client, free_user, mock_provider):
-        """Free + default selected_model (ssai) → send_to_gp, no CTA under ssai mode.
+        """Free + default selected_model (ssai) → send_to_gp, no CTA.
 
-        The default selected_model is "ssai" server-side (test fixture doesn't
-        set it). Under ssai mode, Free + ssai selected → send_to_gp, no CTA
+        Under ssai_free_only, Free + ssai selected → send_to_gp, no CTA
         — they already opted into SS AI; no nag.
         """
         resp = client.post(
@@ -219,13 +218,11 @@ class TestProjectChatPolicy:
         )
         assert resp.status_code == 200
         data = resp.json()
-        # LLM did get called — Free user sends through GP normally
         mock_provider.assert_called_once()
-        # feature_state present but no CTA (Free + ssai selected, ssai mode)
         assert "feature_state" in data
         fs = data["feature_state"]
         assert fs["feature"] == "project_chat"
-        assert fs["policy_mode"] == "ssai"
+        assert fs["policy_mode"] == "ssai_free_only"
         assert "cta" not in fs
 
     def test_pro_user_project_chat_uses_llm_no_cta(self, client, pro_user, mock_provider):

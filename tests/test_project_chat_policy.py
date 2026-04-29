@@ -48,6 +48,17 @@ STATE_MATRIX = [
     (True,  "pro",  True,  "logged_in", "external", "send_to_user_model",  None),
     (False, None,   True,  "logged_in", "external", "login_required",      "login_required"),
 
+    # gp_chat_flag = "ssai_free_only" — hybrid: ssai for Free, logged_in for paid
+    (True,  "free", True,  "ssai_free_only", "ssai",     "send_to_gp",         None),
+    (True,  "free", False, "ssai_free_only", "ssai",     "send_to_gp",         None),
+    (True,  "plus", True,  "ssai_free_only", "ssai",     "send_to_gp",         None),
+    (True,  "pro",  True,  "ssai_free_only", "ssai",     "send_to_gp",         None),
+    (True,  "free", True,  "ssai_free_only", "external", "send_to_gp",         None),
+    (True,  "free", False, "ssai_free_only", "external", "send_to_gp_with_cta", "quota_exhausted"),
+    (True,  "plus", True,  "ssai_free_only", "external", "send_to_user_model", None),
+    (True,  "pro",  True,  "ssai_free_only", "external", "send_to_user_model", None),
+    (False, None,   True,  "ssai_free_only", "external", "login_required",     "login_required"),
+
     # gp_chat_flag = "plus" — Plus/Pro free; Free always gets CTA wrap
     (True,  "free", True,  "plus",      "ssai",     "send_to_gp_with_cta", "quota_remaining"),
     (True,  "free", False, "plus",      "ssai",     "send_to_gp_with_cta", "quota_exhausted"),

@@ -3,13 +3,14 @@
 GP-controlled policy for routing Project Chat sends. Replaces the PR #80
 canned-upsell intercept with a richer per-request verdict.
 
-Last updated: 2026-04-28.
+Last updated: 2026-04-29.
 
 ## Concepts
 
 - **`gp_chat_flag`** — server-controlled policy mode that decides routing.
-  Values: `"all"` | `"ssai"` | `"logged_in"` | `"plus"`. Stored in the
-  `feature_definitions.project_chat` block of the localized tiers config.
+  Values: `"all"` | `"ssai"` | `"ssai_free_only"` | `"logged_in"` | `"plus"`. Stored
+  in the `feature_definitions.project_chat` block of the localized tiers config.
+  See "Mode semantics" below.
 - **`free_quota_per_month`** — integer cap on Free-tier CTA-wrapped sends
   per calendar month (UTC). Valid: `0` | `1..10` | `-1` (unlimited).
   Decrements only when GP processes a `send_to_gp_with_cta` outcome.
@@ -46,6 +47,15 @@ Last updated: 2026-04-28.
 | Yes | Plus | – | `ssai` | Other | Send to GP |
 | Yes | Pro | – | `ssai` | Other | Send to GP |
 | No | – | – | `ssai` | Other | Login CTA |
+| Yes | Free | Yes | `ssai_free_only` | SS AI | Send to GP |
+| Yes | Free | No | `ssai_free_only` | SS AI | Send to GP |
+| Yes | Plus | – | `ssai_free_only` | SS AI | Send to GP |
+| Yes | Pro | – | `ssai_free_only` | SS AI | Send to GP |
+| Yes | Free | Yes | `ssai_free_only` | Other | Send to GP |
+| Yes | Free | No | `ssai_free_only` | Other | **Send to GP with CTA** |
+| Yes | Plus | – | `ssai_free_only` | Other | Send to user model |
+| Yes | Pro | – | `ssai_free_only` | Other | Send to user model |
+| No | – | – | `ssai_free_only` | Other | Login CTA |
 | Yes | Free | Yes | `logged_in` | SS AI | Send to GP |
 | Yes | Free | No | `logged_in` | SS AI | Send to GP |
 | Yes | Plus | – | `logged_in` | SS AI | Send to GP |
@@ -68,6 +78,22 @@ Last updated: 2026-04-28.
 The `Has quota` column flips the CTA *kind*, not the verdict — when both
 "Yes" and "No" rows show "Send to GP with CTA," the verdict is identical
 but the rendered CTA copy differs.
+
+## Mode semantics
+
+| Mode | Login required | Free + SS AI | Free + external | Paid + SS AI | Paid + external | When to use |
+|---|---|---|---|---|---|---|
+| `all` | No | → GP | → user model | → GP | → user model | Open beta / no gates |
+| `ssai` | Yes | → GP | → GP, CTA on no-quota | → GP | → GP (override) | Force everything through GP |
+| `ssai_free_only` | Yes | → GP | → GP, CTA on no-quota | → GP | → user model (BYOK respected) | **Day-1 default**: metered conversion gate for Free, BYOK respect for paid |
+| `logged_in` | Yes | → GP | → user model | → GP | → user model | Pure routing-by-choice with auth gate |
+| `plus` | Yes | → GP, always CTA on Free | → GP, always CTA on Free | → GP | → user model | Strongest paid-feature framing |
+
+Choose between `ssai` and `ssai_free_only` based on whether you want to
+respect BYOK on paid tiers. They're identical for Free users — the
+metered-CTA semantics on Free + external + no-quota are the same. The
+only difference is whether Plus/Pro + external is overridden (`ssai`) or
+respected (`ssai_free_only`).
 
 ## Endpoints
 
@@ -197,7 +223,7 @@ arrives as a normal JSON body, not SSE.
 
 | Setting | Default |
 |---|---|
-| `gp_chat_flag` | `"plus"` |
+| `gp_chat_flag` | `"ssai_free_only"` |
 | `free_quota_per_month` | `1` |
 | `cta_strings.quota_remaining` | `"You have {remaining} of {total} free Project Chats remaining this month. Upgrade to Plus for unlimited."` |
 | `cta_strings.quota_exhausted` | `"You've used your {total} free Project Chats for this month. Upgrade to Plus for unlimited."` |

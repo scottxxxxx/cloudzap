@@ -21,12 +21,12 @@ class TestProjectChatPreflight:
         assert body["verdict"] == "login_required"
         assert body["cta"]["kind"] == "login_required"
 
-    def test_plus_user_external_model_routes_to_gp_under_ssai(self, client, tmp_db_path):
-        """Plus user with external selected → send_to_gp under ssai mode (override).
+    def test_plus_user_external_routes_to_user_model_under_ssai_free_only(self, client, tmp_db_path):
+        """Plus user with external selected → send_to_user_model under ssai_free_only default.
 
-        ssai mode forces routing through GP regardless of the user's selected
-        model. This is the override behavior — distinct from logged_in/all
-        modes which respect the user's choice.
+        ssai_free_only applies ssai semantics to Free tier and logged_in
+        semantics to paid tiers — paying users keep their BYOK choice
+        (distinct from plain ssai mode which would override to send_to_gp).
         """
         _insert_user(tmp_db_path, user_id="plus-pc", tier="plus", monthly_limit=-1)
         headers = {"Authorization": f"Bearer {_jwt_token('plus-pc')}"}
@@ -37,8 +37,7 @@ class TestProjectChatPreflight:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["verdict"] == "send_to_gp"
-        # No CTA for paid users even when overridden
+        assert body["verdict"] == "send_to_user_model"
         assert "cta" not in body
 
     def test_plus_user_ssai_model_routes_to_gp(self, client, tmp_db_path):

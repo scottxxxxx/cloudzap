@@ -26,7 +26,7 @@ CtaKind = Literal[
     "unlimited",
     "login_required",
 ]
-GpChatFlag = Literal["all", "ssai", "logged_in", "plus"]
+GpChatFlag = Literal["all", "ssai", "ssai_free_only", "logged_in", "plus"]
 SelectedModel = Literal["ssai", "external"]
 Tier = Literal["free", "plus", "pro", "admin"]
 
@@ -100,8 +100,8 @@ def resolve_project_chat_verdict(
 
     # =========================================================
     # gp_chat_flag = "ssai" — auth required; SS AI overrides
-    # user model selection. Free users with their own model
-    # selected get a CTA wrap when out of quota.
+    # user model selection (paid tiers too). Free users with
+    # their own model selected get a CTA wrap when out of quota.
     # =========================================================
     if gp_chat_flag == "ssai":
         if not is_logged_in:
@@ -113,6 +113,29 @@ def resolve_project_chat_verdict(
                 cta_kind=_cta_kind_for_free_with_cta(),
             )
         return VerdictResult(verdict="send_to_gp", cta_kind=None)
+
+    # =========================================================
+    # gp_chat_flag = "ssai_free_only" — auth required. Hybrid:
+    # ssai semantics for Free tier (override user model, metered
+    # gate via CTA), logged_in semantics for paid tiers (respect
+    # the BYOK choice). Use this when you want both the Free
+    # conversion nudge AND BYOK respect for paying users.
+    # =========================================================
+    if gp_chat_flag == "ssai_free_only":
+        if not is_logged_in:
+            return VerdictResult(verdict="login_required", cta_kind="login_required")
+        if tier == "free":
+            # Same shape as ssai mode for Free tier
+            if selected_model == "external" and not has_quota:
+                return VerdictResult(
+                    verdict="send_to_gp_with_cta",
+                    cta_kind=_cta_kind_for_free_with_cta(),
+                )
+            return VerdictResult(verdict="send_to_gp", cta_kind=None)
+        # Plus / Pro / Admin: respect their model choice (logged_in semantics)
+        if selected_model == "ssai":
+            return VerdictResult(verdict="send_to_gp", cta_kind=None)
+        return VerdictResult(verdict="send_to_user_model", cta_kind=None)
 
     # =========================================================
     # gp_chat_flag = "plus" — Plus/Pro required for unrestricted
