@@ -103,8 +103,7 @@
         "quota_exhausted": "今月の無料プロジェクトチャット{total}回をすべて使い切りました。Plusにアップグレードすると無制限にご利用いただけます。",
         "unlimited": "Shoulder Surfのプロジェクトチャット。",
         "login_required": "プロジェクトチャットを使用するにはサインインしてください。"
-      },
-      "min_client_version": 0
+      }
     }
   }
 }

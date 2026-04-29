@@ -199,61 +199,12 @@ arrives as a normal JSON body, not SSE.
 |---|---|
 | `gp_chat_flag` | `"plus"` |
 | `free_quota_per_month` | `1` |
-| `min_client_version` | `0` (no gate) |
 | `cta_strings.quota_remaining` | `"You have {remaining} of {total} free Project Chats remaining this month. Upgrade to Plus for unlimited."` |
 | `cta_strings.quota_exhausted` | `"You've used your {total} free Project Chats for this month. Upgrade to Plus for unlimited."` |
 | `cta_strings.unlimited` | `"Project Chat by Shoulder Surf."` |
 | `cta_strings.login_required` | `"Sign in to use Project Chat."` |
 
 Spanish and Japanese variants live in `tiers.es.json` and `tiers.ja.json`.
-
-## Backward-compat: `X-Client-Version` gate
-
-Set on `feature_definitions.project_chat.min_client_version`. Lets us
-ship the new policy without coordinating an exact iOS release window.
-
-**How clients identify themselves:** SS sends an integer `X-Client-Version`
-header on every `/v1/chat` call. Use the iOS app's build number (e.g.
-`X-Client-Version: 18`).
-
-**Gate behavior on `/v1/chat` for `prompt_mode=ProjectChat`:**
-
-| `X-Client-Version` | `min_client_version` | Behavior |
-|---|---|---|
-| missing | any | Treated as 0 — gated when `min > 0`. |
-| non-integer | any | Treated as 0 — gated when `min > 0`. |
-| `>= min` | `> 0` | New policy applies. Verdict resolution + feature_state populated. |
-| `< min` | `> 0` | **Legacy path.** Free user → canned-bypass response (PR #80 shape: `model: "ghostpour-canned"`, `ai_tier: "free"`, canned text). Paid user → normal LLM call, no `feature_state` in response. |
-| any | `0` | Gate is off. New policy applies for all clients. |
-
-**Why the gate exists:** the new `feature_state` block, 401/422 error
-codes, and CTA UI all require client work. Clients shipped before that
-work was done would silently consume LLM allocation (no canned bypass)
-and ignore `feature_state` (additive field). The gate restores the
-PR #80 zero-cost canned bypass for those clients until they ship a build
-that knows the new contract.
-
-**The preflight endpoint** (`POST /v1/features/project-chat/check`) is
-**not gated**. Old clients don't call preflight — they don't know it
-exists. Any client that does call preflight gets the new-contract
-verdict, regardless of `X-Client-Version`. SS clients implementing the
-new contract should send `X-Client-Version` on both preflight and
-`/v1/chat` for consistency.
-
-**Production rollout pattern:**
-
-1. GP merges + deploys with `min_client_version: 0`. Behavior is fully
-   the new contract for everyone (including builds that don't yet
-   implement preflight — they just won't render `feature_state.cta`).
-2. SS ships a build that implements preflight + `feature_state` + 401/422
-   handling. That build sends `X-Client-Version: <build_number>`.
-3. GP bumps `min_client_version` to that build number via remote config
-   refresh. Older builds fall back to legacy canned-bypass; new builds
-   use the new policy.
-
-If you'd rather not deal with the gate at all, the alternative is for GP
-to delay merge until SS confirms the new build is ready. Pick one — both
-work.
 
 ## Multi-device race
 

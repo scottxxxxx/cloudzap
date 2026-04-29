@@ -103,8 +103,7 @@
         "quota_exhausted": "Has usado tus {total} chats de proyecto gratis de este mes. Actualiza a Plus para acceso ilimitado.",
         "unlimited": "Chat de proyecto por Shoulder Surf.",
         "login_required": "Inicia sesión para usar Chat de proyecto."
-      },
-      "min_client_version": 0
+      }
     }
   }
 }
