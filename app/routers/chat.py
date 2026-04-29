@@ -229,6 +229,19 @@ async def verify_receipt(
     trial_to_paid = user.is_trial and not is_trial
     is_state_change = tier_changed or trial_to_paid
 
+    # Cross-account dedup: clear original_transaction_id from any OTHER user
+    # row currently holding this transaction_id before binding it here.
+    # Reachable via SS receipt-replay when a queued receipt lands under a
+    # different signed-in JWT than the one it was originally verified under
+    # (account switch on same device, or anon-purchase → later sign-in to a
+    # different account). Without this, two rows hold the same id and the
+    # apple-notifications webhook lookup only updates one of them.
+    await db.execute(
+        "UPDATE users SET original_transaction_id = NULL "
+        "WHERE original_transaction_id = ? AND id != ?",
+        (body.transaction_id, user.id),
+    )
+
     if is_trial:
         # Trial: use trial_cost_limit_usd, 7-day period
         trial_limit = new_tier.trial_cost_limit_usd or new_tier.monthly_cost_limit_usd
