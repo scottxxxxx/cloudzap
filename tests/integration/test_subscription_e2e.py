@@ -123,6 +123,66 @@ class TestVerifyReceipt:
         assert row[0] == 0.30, f"trial monthly_used_usd was reset to {row[0]}, expected 0.30"
         assert row[1] == 1  # still in trial
 
+    def test_verify_receipt_cross_account_clears_other_binding(
+        self, client, tmp_db_path
+    ):
+        """Same transaction_id under a new JWT clears the binding from any
+        other user row, preventing duplicate bindings.
+
+        Reachable when SS replays a queued receipt under a different signed-in
+        user than the one that originally verified it (account switch on same
+        device, or anon-purchase → later sign-in to a different account).
+        Without cleanup-on-bind, two user rows would hold the same
+        original_transaction_id and the apple-notifications webhook lookup
+        would only update one of them.
+        """
+        # User A originally verified the receipt
+        _insert_user(
+            tmp_db_path, user_id="user-a", tier="plus", monthly_limit=-1,
+        )
+        conn = sqlite3.connect(tmp_db_path)
+        conn.execute(
+            "UPDATE users SET original_transaction_id = ? WHERE id = ?",
+            ("txn_replay", "user-a"),
+        )
+        conn.commit()
+        conn.close()
+
+        # User B signs in on the same device; SS replays the queued receipt
+        _insert_user(
+            tmp_db_path, user_id="user-b", tier="free", monthly_limit=0.05,
+        )
+        headers = {"Authorization": f"Bearer {_jwt_token('user-b')}"}
+
+        resp = client.post(
+            "/v1/verify-receipt",
+            json={
+                "product_id": _PLUS_PRODUCT,
+                "transaction_id": "txn_replay",
+                "is_trial": False,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+        conn = sqlite3.connect(tmp_db_path)
+        rows = conn.execute(
+            "SELECT id FROM users WHERE original_transaction_id = ?",
+            ("txn_replay",),
+        ).fetchall()
+        a_txn = conn.execute(
+            "SELECT original_transaction_id FROM users WHERE id = ?",
+            ("user-a",),
+        ).fetchone()[0]
+        conn.close()
+
+        assert len(rows) == 1, (
+            f"expected exactly one row holding the txn, got {len(rows)}: "
+            f"{[r[0] for r in rows]}"
+        )
+        assert rows[0][0] == "user-b"
+        assert a_txn is None, "user-a should have been cleared"
+
     def test_verify_receipt_unknown_product(self, client, tmp_db_path):
         """Unknown product ID → 400."""
         _insert_user(tmp_db_path, user_id="unknown-product-user", tier="free")
