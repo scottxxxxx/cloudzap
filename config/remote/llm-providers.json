@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "providers": [
     {
       "id": "cloudzap",
@@ -198,7 +198,7 @@
           "supportsVision": true,
           "contextWindow": 1048576,
           "inputCostPerMillion": 2.0,
-          "outputCostPerMillion": 10.0,
+          "outputCostPerMillion": 12.0,
           "litellmKey": "gemini/gemini-3.1-pro-preview"
         },
         {
@@ -208,20 +208,20 @@
           "isDefault": true,
           "supportsVision": true,
           "contextWindow": 1048576,
-          "inputCostPerMillion": 0.15,
-          "outputCostPerMillion": 0.6,
+          "inputCostPerMillion": 0.5,
+          "outputCostPerMillion": 3.0,
           "litellmKey": "gemini/gemini-3-flash-preview"
         },
         {
-          "id": "gemini-2.5-flash-lite",
-          "displayName": "Gemini 2.5 Flash Lite",
-          "description": "Lightweight, fast variant optimized for high-volume, cost-sensitive tasks.",
+          "id": "gemini-3.1-flash-lite-preview",
+          "displayName": "Gemini 3.1 Flash Lite",
+          "description": "Most cost-effective Gemini 3 model; 1M context, ideal for high-volume queries.",
           "isDefault": false,
           "supportsVision": true,
           "contextWindow": 1048576,
-          "inputCostPerMillion": 0.1,
-          "outputCostPerMillion": 0.4,
-          "litellmKey": "gemini/gemini-2.5-flash-lite"
+          "inputCostPerMillion": 0.25,
+          "outputCostPerMillion": 1.5,
+          "litellmKey": "gemini/gemini-3.1-flash-lite-preview"
         }
       ],
       "notes": "Google Gemini models.",
@@ -422,15 +422,15 @@
       "temperatureDefault": 0.7,
       "models": [
         {
-          "id": "google/gemini-2.5-flash",
-          "displayName": "Gemini 2.5 Flash (OR)",
-          "description": "Fast, 1M context, vision. Best all-around default for mid-meeting queries.",
+          "id": "google/gemini-3-flash-preview",
+          "displayName": "Gemini 3 Flash (OR)",
+          "description": "Latest Flash with Pro-grade reasoning at much lower latency. 1M context, vision. Best all-around default for mid-meeting queries.",
           "isDefault": true,
           "supportsVision": true,
           "contextWindow": 1048576,
-          "inputCostPerMillion": 0.30,
-          "outputCostPerMillion": 2.50,
-          "litellmKey": "openrouter/google/gemini-2.5-flash"
+          "inputCostPerMillion": 0.50,
+          "outputCostPerMillion": 3.00,
+          "litellmKey": "openrouter/google/gemini-3-flash-preview"
         },
         {
           "id": "anthropic/claude-haiku-4.5",
@@ -455,15 +455,15 @@
           "litellmKey": "openrouter/openai/gpt-5-mini"
         },
         {
-          "id": "google/gemini-2.5-flash-lite",
-          "displayName": "Gemini 2.5 Flash Lite (OR)",
-          "description": "Lightweight Flash for high-volume, cost-sensitive queries. Cheapest vision-capable option.",
+          "id": "google/gemini-3.1-flash-lite-preview",
+          "displayName": "Gemini 3.1 Flash Lite (OR)",
+          "description": "Most cost-effective Gemini 3 model. 1M context, vision; ideal for high-volume, cost-sensitive queries.",
           "isDefault": false,
           "supportsVision": true,
           "contextWindow": 1048576,
-          "inputCostPerMillion": 0.10,
-          "outputCostPerMillion": 0.40,
-          "litellmKey": "openrouter/google/gemini-2.5-flash-lite"
+          "inputCostPerMillion": 0.25,
+          "outputCostPerMillion": 1.50,
+          "litellmKey": "openrouter/google/gemini-3.1-flash-lite-preview"
         },
         {
           "id": "anthropic/claude-sonnet-4.6",
@@ -477,15 +477,15 @@
           "litellmKey": "openrouter/anthropic/claude-sonnet-4.6"
         },
         {
-          "id": "google/gemini-2.5-pro",
-          "displayName": "Gemini 2.5 Pro (OR)",
-          "description": "Flagship Gemini with 1M context. Best choice for very long meetings with deep analysis.",
+          "id": "google/gemini-3.1-pro-preview",
+          "displayName": "Gemini 3.1 Pro (OR)",
+          "description": "Flagship Gemini with 1M context, top-tier reasoning. Best for long meetings with deep analysis.",
           "isDefault": false,
           "supportsVision": true,
           "contextWindow": 1048576,
-          "inputCostPerMillion": 1.25,
-          "outputCostPerMillion": 10.00,
-          "litellmKey": "openrouter/google/gemini-2.5-pro"
+          "inputCostPerMillion": 2.00,
+          "outputCostPerMillion": 12.00,
+          "litellmKey": "openrouter/google/gemini-3.1-pro-preview"
         },
         {
           "id": "anthropic/claude-opus-4.7",

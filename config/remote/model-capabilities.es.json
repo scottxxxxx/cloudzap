@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "models": {
     "foundation-models": {
       "provider": "Apple",
@@ -257,7 +257,7 @@
       "provider": "Google",
       "description": "Ultimo modelo de razonamiento de primera linea; contexto de 1M, fuerte rendimiento agentivo y en programacion",
       "inputCostPerMillion": 2.0,
-      "outputCostPerMillion": 10.0,
+      "outputCostPerMillion": 12.0,
       "contextWindow": "1M",
       "weights": "Closed",
       "supportsImages": true,
@@ -284,8 +284,8 @@
     "gemini-3-flash-preview": {
       "provider": "Google",
       "description": "Variante Flash con razonamiento de nivel Pro a menor latencia y costo",
-      "inputCostPerMillion": 0.15,
-      "outputCostPerMillion": 0.6,
+      "inputCostPerMillion": 0.5,
+      "outputCostPerMillion": 3.0,
       "contextWindow": "1M",
       "weights": "Closed",
       "supportsImages": true,
@@ -309,11 +309,11 @@
       "splitModelSummary": true,
       "estimatedAvailableTokens": 1047552
     },
-    "gemini-2.5-flash-lite": {
+    "gemini-3.1-flash-lite-preview": {
       "provider": "Google",
-      "description": "Variante ligera y rapida optimizada para tareas de alto volumen y bajo costo",
-      "inputCostPerMillion": 0.1,
-      "outputCostPerMillion": 0.4,
+      "description": "El modelo Gemini 3 mas economico; contexto 1M, ideal para consultas de alto volumen",
+      "inputCostPerMillion": 0.25,
+      "outputCostPerMillion": 1.5,
       "contextWindow": "1M",
       "weights": "Closed",
       "supportsImages": true,

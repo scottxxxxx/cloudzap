@@ -72,6 +72,9 @@ providers:
       - id: "gemini-3-flash-preview"
         supports_vision: true
         max_tokens_default: 4096
+      - id: "gemini-3.1-flash-lite-preview"
+        supports_vision: true
+        max_tokens_default: 4096
 
   xai:
     display_name: "xAI (Grok)"
