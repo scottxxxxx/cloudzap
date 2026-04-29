@@ -731,40 +731,63 @@ async def chat(
 
         _pc_locale = _parse_accept_language(request.headers.get("Accept-Language"))
         project_chat_pc_config = _get_project_chat_config(request, _pc_locale)
-        gp_chat_flag = project_chat_pc_config.get("gp_chat_flag", "plus")
-        free_quota_per_month = project_chat_pc_config.get("free_quota_per_month", 1)
-        selected_model = body.get_meta("selected_model") or "ssai"
-        if user.effective_tier == "free":
-            project_chat_quota = read_quota_state(user, free_quota_per_month)
-            has_quota = project_chat_quota.has_quota
+
+        # Min-version gate: clients without X-Client-Version, or below the
+        # configured threshold, fall through to PR #80 legacy behavior. This
+        # lets us merge the new policy without coordinating an exact iOS
+        # release window — older builds keep getting the canned-bypass for
+        # Free users until they ship a build that knows the new contract.
+        min_client_version = int(project_chat_pc_config.get("min_client_version", 0) or 0)
+        client_version_header = request.headers.get("X-Client-Version") or ""
+        try:
+            client_version = int(client_version_header) if client_version_header else 0
+        except ValueError:
+            client_version = 0
+        if min_client_version > 0 and client_version < min_client_version:
+            # Legacy path. Free users get the canned-bypass; paid users
+            # process normally with no feature_state in the response (old
+            # clients don't render it anyway).
+            if user.effective_tier == "free":
+                return _project_chat_teaser_response(request)
+            # Paid user on old build: clear pc_config so the response
+            # builder skips feature_state population, then fall through to
+            # the normal LLM path.
+            project_chat_pc_config = None
         else:
-            has_quota = True
+            gp_chat_flag = project_chat_pc_config.get("gp_chat_flag", "plus")
+            free_quota_per_month = project_chat_pc_config.get("free_quota_per_month", 1)
+            selected_model = body.get_meta("selected_model") or "ssai"
+            if user.effective_tier == "free":
+                project_chat_quota = read_quota_state(user, free_quota_per_month)
+                has_quota = project_chat_quota.has_quota
+            else:
+                has_quota = True
 
-        verdict = resolve_project_chat_verdict(
-            is_logged_in=True,  # /v1/chat already requires JWT
-            tier=user.effective_tier,
-            gp_chat_flag=gp_chat_flag,
-            selected_model=selected_model,  # type: ignore[arg-type]
-            has_quota=has_quota,
-            free_quota_per_month=free_quota_per_month,
-        )
+            verdict = resolve_project_chat_verdict(
+                is_logged_in=True,  # /v1/chat already requires JWT
+                tier=user.effective_tier,
+                gp_chat_flag=gp_chat_flag,
+                selected_model=selected_model,  # type: ignore[arg-type]
+                has_quota=has_quota,
+                free_quota_per_month=free_quota_per_month,
+            )
 
-        if verdict.verdict == "login_required":
-            # Should be unreachable since /v1/chat requires JWT, but defense
-            # in depth in case auth changes.
-            raise HTTPException(
-                status_code=401,
-                detail={"code": "login_required"},
-            )
-        if verdict.verdict == "send_to_user_model":
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "use_user_model"},
-            )
-        # send_to_gp / send_to_gp_with_cta both proceed through the normal
-        # LLM path. Track the CTA kind so we can populate feature_state on
-        # the response.
-        project_chat_cta_kind = verdict.cta_kind
+            if verdict.verdict == "login_required":
+                # Should be unreachable since /v1/chat requires JWT, but defense
+                # in depth in case auth changes.
+                raise HTTPException(
+                    status_code=401,
+                    detail={"code": "login_required"},
+                )
+            if verdict.verdict == "send_to_user_model":
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "use_user_model"},
+                )
+            # send_to_gp / send_to_gp_with_cta both proceed through the normal
+            # LLM path. Track the CTA kind so we can populate feature_state on
+            # the response.
+            project_chat_cta_kind = verdict.cta_kind
 
     # 1.6. Protected-prompts context gate. iOS already enforces requiresContext
     # client-side; this closes the bypass loophole when a non-iOS or modified

@@ -73,6 +73,13 @@ features:
       quota_exhausted: "You've used your {total} free Project Chats for this month. Upgrade to Plus for unlimited."
       unlimited: "Project Chat by Shoulder Surf."
       login_required: "Sign in to use Project Chat."
+    # Minimum client build that opts into the new policy. Clients sending
+    # X-Client-Version below this — or missing the header — fall through
+    # to PR #80 legacy behavior (canned-bypass for Free users; paid users
+    # process normally with no feature_state). Default 0 = no gate.
+    # Bump this when SS ships a build that implements the preflight + 401/422
+    # handling so older builds don't get the new contract under-the-hood.
+    min_client_version: 0
     # DEPRECATED: kept until iOS clients migrate to the policy verdict.
     # The old free-tier intercept (PR #80) returns this when the policy
     # collapses to "deny without verdict" — should rarely fire post-migration.

@@ -32,6 +32,11 @@ class FeatureDefinition(BaseModel):
     gp_chat_flag: str = ""              # "all" | "ssai" | "logged_in" | "plus"
     free_quota_per_month: int = 0       # 0 | 1..10 | -1 (unlimited)
     cta_strings: dict[str, str] = {}    # keys: quota_remaining, quota_exhausted, unlimited, login_required
+    # Minimum client build that opts into the new policy. Clients missing
+    # the X-Client-Version header or sending a value below this threshold
+    # fall through to legacy PR #80 behavior (canned-bypass for Free users).
+    # Default 0 means "no gate — every client uses new policy."
+    min_client_version: int = 0
 
 
 class FeatureConfig(BaseModel):

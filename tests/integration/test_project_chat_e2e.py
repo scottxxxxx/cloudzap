@@ -2,10 +2,29 @@
 
 import sqlite3
 
-from tests.conftest import _insert_user, _jwt_token
+import pytest
+
+from tests.conftest import _insert_user, _jwt_token, chat_request
 
 
 PREFLIGHT_PATH = "/v1/features/project-chat/check"
+
+
+@pytest.fixture
+def gate_enabled(client):
+    """Bump min_client_version on the runtime tiers config so the gate fires.
+
+    The chat router resolves project_chat config from remote_configs first
+    (tiers.json under the current locale), falling back to features.yml
+    only if the tiers entry is missing. We mutate the live remote_configs
+    dict so the gate actually applies for the test request.
+    """
+    configs = client.app.state.remote_configs
+    pc = configs["tiers"]["feature_definitions"]["project_chat"]
+    original = pc.get("min_client_version", 0)
+    pc["min_client_version"] = 18
+    yield 18
+    pc["min_client_version"] = original
 
 
 class TestProjectChatPreflight:
@@ -83,6 +102,114 @@ class TestProjectChatPreflight:
         ).fetchone()[0]
         conn.close()
         assert used == 0
+
+
+class TestProjectChatMinClientVersionGate:
+    """When min_client_version > 0 and X-Client-Version is missing or below
+    threshold, /v1/chat ProjectChat falls through to PR #80 legacy behavior:
+    Free users get the canned-bypass response; paid users process normally
+    with no feature_state.
+    """
+
+    def test_old_client_free_user_gets_canned_bypass(
+        self, client, tmp_db_path, gate_enabled, mock_provider
+    ):
+        """Free user, no X-Client-Version header, gate enabled → canned response, no LLM call."""
+        _insert_user(tmp_db_path, user_id="old-free", tier="free", monthly_limit=0.35)
+        headers = {"Authorization": f"Bearer {_jwt_token('old-free')}"}
+        resp = client.post(
+            "/v1/chat",
+            json=chat_request(prompt_mode="ProjectChat"),
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        # Canned shape from PR #80
+        assert data["model"] == "ghostpour-canned"
+        assert data["ai_tier"] == "free"
+        assert "Project Chat" in data["text"]
+        assert "Plus" in data["text"]
+        # No feature_state — old contract
+        assert "feature_state" not in data
+        # No LLM call
+        mock_provider.assert_not_called()
+
+    def test_old_client_paid_user_processes_normally_no_feature_state(
+        self, client, tmp_db_path, gate_enabled, mock_provider
+    ):
+        """Paid user, no X-Client-Version, gate enabled → normal LLM call, no feature_state."""
+        _insert_user(tmp_db_path, user_id="old-paid", tier="pro", monthly_limit=-1)
+        headers = {"Authorization": f"Bearer {_jwt_token('old-paid')}"}
+        resp = client.post(
+            "/v1/chat",
+            json=chat_request(prompt_mode="ProjectChat"),
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        # Real LLM response
+        assert data["model"] != "ghostpour-canned"
+        mock_provider.assert_called_once()
+        # No feature_state for old clients
+        assert "feature_state" not in data
+
+    def test_new_client_free_user_gets_new_policy_with_feature_state(
+        self, client, tmp_db_path, gate_enabled, mock_provider
+    ):
+        """Free user with X-Client-Version >= threshold → new policy applies."""
+        _insert_user(tmp_db_path, user_id="new-free", tier="free", monthly_limit=0.35)
+        headers = {
+            "Authorization": f"Bearer {_jwt_token('new-free')}",
+            "X-Client-Version": "18",
+        }
+        resp = client.post(
+            "/v1/chat",
+            json=chat_request(prompt_mode="ProjectChat"),
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        # New contract — real LLM + feature_state
+        assert data["model"] != "ghostpour-canned"
+        mock_provider.assert_called_once()
+        assert "feature_state" in data
+        assert data["feature_state"]["feature"] == "project_chat"
+
+    def test_client_version_below_threshold_treated_as_old(
+        self, client, tmp_db_path, gate_enabled, mock_provider
+    ):
+        """X-Client-Version: 17 with min_client_version: 18 → old client."""
+        _insert_user(tmp_db_path, user_id="below-thresh", tier="free", monthly_limit=0.35)
+        headers = {
+            "Authorization": f"Bearer {_jwt_token('below-thresh')}",
+            "X-Client-Version": "17",
+        }
+        resp = client.post(
+            "/v1/chat",
+            json=chat_request(prompt_mode="ProjectChat"),
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["model"] == "ghostpour-canned"
+        mock_provider.assert_not_called()
+
+    def test_malformed_client_version_header_treated_as_old(
+        self, client, tmp_db_path, gate_enabled, mock_provider
+    ):
+        """Non-integer X-Client-Version → defaults to 0 → old client."""
+        _insert_user(tmp_db_path, user_id="malformed", tier="free", monthly_limit=0.35)
+        headers = {
+            "Authorization": f"Bearer {_jwt_token('malformed')}",
+            "X-Client-Version": "v1.2.3-beta",
+        }
+        resp = client.post(
+            "/v1/chat",
+            json=chat_request(prompt_mode="ProjectChat"),
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["model"] == "ghostpour-canned"
+        mock_provider.assert_not_called()
 
 
 class TestProjectChatTierUpgradeZerosCounter:
